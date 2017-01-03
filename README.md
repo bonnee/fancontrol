@@ -22,3 +22,5 @@ I wanted to give the box a fancy look so I found a MAX7219-based 8-digit 7-segme
 ## 4. The controller
 
 I chose a cheap and tiny [SparkFun Pro Micro](https://www.sparkfun.com/products/12640) clone (not SparkFun branded) that I found for about 15€ on Amazon. This board is basically a stripped-down Arduino Leonardo featuring an Atmel 32u4 microcontroller that fits all my needs.
+
+The system is mounted in a custom box, hooked to the ceiling of the rack, blowing hot air out.
