@@ -4,3 +4,6 @@
 [submodule "libraries/pid"]
 	path = libraries/pid
 	url = https://github.com/br3ttb/Arduino-PID-Library.git
+[submodule "libraries/dht"]
+	path = libraries/dht
+	url = https://github.com/markruys/arduino-DHT
