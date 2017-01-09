@@ -3,10 +3,6 @@ Arduino PWM DC fan control
 
 This project I made is meant to control the temperature of a network/server rack by using 4 ceiling-mounted temperature-driven BLDC 12V PWM Fans using an Arduino board.
 
- * The fan(s);
- * A temperature sensor;
- * A 7 segment display.
-
 ## 1. The fans
 
 4 [Arctic F12 PWM PST fans](https://www.arctic.ac/eu_en/f12-pwm-pst.html) are used because they're cheap but good quality, horizontally-mountable, 4 pin PWM and PST wich means that every fan has an extra female connector to hook up another fan so that I can decrease the PCB footprint by using only one fan connector.
