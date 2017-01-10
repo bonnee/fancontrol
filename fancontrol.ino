@@ -1,92 +1,243 @@
-#include "libraries/ledcontrol/src/LedControl.h"
-#include "libraries/pid/PID_v1.h"
+/*    DC PWM Fan controller
+  This software is meant to drive one or multiple PC fans through an Atmel 32u4 based controller.
+  The PWM frequency is set to 23437 Hz that is within the 21k-25k Hz range so it should work with any PC fan.
+  For more details on how PWM works on the 32u4, check this link:
 
-#define THERMO_IN 2
-#define FAN_OUT 5
-#define LED_OUT_A 10
-#define LED_OUT_B 11
-#define LED_OUT_C 12
+  http://r6500.blogspot.it/2014/12/fast-pwm-on-arduino-leonardo.html
 
-double Kp=1, Ki=0.05, Kd=0.25;
+  Note that the 32u4 has 2 pins (6 and 13) hooked to Timer4, but since my board doesn't have pin 13 I only configure pin 6.
+  A RPM reading system is also featured in this example (although it has proven to be not that accurate, at least on my setup).
 
-double Temperature, TargetTemp, FanSpeed;
+  The sketch will:
+   Fade the fan down to 15%;
+   Keep the fan at 15% for 10 seconds;
+   Fade it up to 100%;
+   Keep the fan at 100% for 10 seconds;
+   Repeat.
 
-PID fanPid(&Temperature, &FanSpeed, &TargetTemp, Kp, Ki, Kd, DIRECT);
+  This code has been tested on a SparkFun Pro Micro 16MHz with up to 4 Arctic F12 PWM PST Fans connected to the same pin, and it works just fine.
+*/
 
-LedControl led=LedControl(LED_OUT_A,LED_OUT_B,LED_OUT_C,1);
+#include <PID_v1.h>
+#include <LedControl.h>
+#include <EEPROM.h>
 
-// For the delay
-int wait = 5000;
-unsigned long prev;
+#define CONFIG_VERSION "fan"
+// Tell it where to store your config data in EEPROM
+#define CONFIG_START 32
 
-void setup() {
-        pinMode(THERMO_IN,INPUT);
-        pinMode(FAN_OUT,OUTPUT);
-        pinMode(LED_OUT_A,OUTPUT);
-        pinMode(LED_OUT_B,OUTPUT);
-        pinMode(LED_OUT_C,OUTPUT);
+// Pin 6 shortcut
+#define PWM6        OCR4D
 
-        TargetTemp=35;
+// Terminal count
+#define PWM6_MAX OCR4C
 
-        /* Exit led display power-saving mode*/
-        led.shutdown(0,false);
-        /* Set the brightness to a medium values */
-        led.setIntensity(0,8);
-        /* and clear the display */
-        led.clearDisplay(0);
+/* Configure the PWM clock*/
+void pwm6configure()
+{
+  // TCCR4B configuration
+  TCCR4B = 4; /* 4 sets 23437Hz */
 
+  // TCCR4C configuration
+  TCCR4C = 0;
 
-        fanPid.SetMode(AUTOMATIC);
+  // TCCR4D configuration
+  TCCR4D = 0;
 
-        prev = millis();
+  // PLL Configuration
+  PLLFRQ = (PLLFRQ & 0xCF) | 0x30;
+
+  // Terminal count for Timer 4 PWM
+  OCR4C = 255;
 }
 
-void printTemp(int v){
-        int ones;
-        int tens;
-        int hundreds;
-
-        boolean negative=false;
-
-        if(v < -999 || v > 999)
-                return;
-        if(v<0) {
-                negative=true;
-                v=v* -1;
-        }
-        ones=v%10;
-        v=v/10;
-        tens=v%10;
-        v=v/10; hundreds=v;
-        if(negative) {
-                //print character '-' in the leftmost column
-                led.setChar(0,3,'-',false);
-        }
-        else {
-                //print a blank in the sign column
-                led.setChar(0,3,' ',false);
-        }
-        //Now print the number digit by digit
-        led.setDigit(0,2,(byte)hundreds,false);
-        led.setDigit(0,1,(byte)tens,false);
-        led.setDigit(0,0,(byte)ones,false);
+// Set PWM to D6 (Timer4 D)
+// Argument is PWM between 0 and 255
+void pwmSet6(int value)
+{
+  OCR4D = value; // Set PWM value
+  DDRD |= 1 << 7; // Set Output Mode D7
+  TCCR4C |= 0x09; // Activate channel D
 }
 
-/* Converts a number into bytes */
-void getBytes(){
+/*************** ADDITIONAL DEFINITIONS ******************/
 
+// Macro to converts from duty (0..100) to PWM (0..255)
+#define DUTY2PWM(x)  ((255*(x))/100)
+
+/**********************************************************/
+
+struct StoreStruct {
+  // This is for mere detection if they are your settings
+  char version[4];
+  // The variables of your settings
+  double target;
+} storage = {
+  CONFIG_VERSION,
+  // The default values
+  40
+};
+
+
+/*        Pinouts       */
+byte SpdIn = 7;                             // Hall sensor reading pinout
+byte segDin = 15, segClk = 16, segCs = 14;  // 7-segment display pinout
+byte tempIn = 4;                            // Temperature sensor pinout
+byte tempUpPin = 1, tempDownPin = 2;              // Up/Down buttons pinout
+
+volatile unsigned long duration = 0; // accumulates pulse width
+volatile unsigned int pulsecount = 0;
+volatile unsigned long previousMicros = 0;
+int ticks = 0, Speed = 0;
+
+long wait = 1e6;  // Time to wait between updates. In micros
+unsigned long prev1, prev2; // Timer placeholders
+
+double duty;
+double temp = 30;
+
+bool tempChanged = false;
+
+
+PID myPID(&temp, &duty, &storage.target, 0, 0, 1, DIRECT);
+LedControl lc = LedControl(segDin, segClk, segCs, 1);
+
+//  Called when hall sensor pulses
+void pickrpm ()
+{
+  unsigned long currentMicros = micros();
+
+  if (currentMicros - previousMicros > 20000) {   // Prevent pulses less than 20k micros far.
+    duration += currentMicros - previousMicros;
+    previousMicros = currentMicros;
+    ticks++;
+  }
 }
 
-void loop() {
-        unsigned long cur = millis();
-        if (cur - prev >= wait) {
-                prev = cur;
-
-                fanPid.Compute();
-
-                digitalWrite(FAN_OUT,FanSpeed);
-
-                printLed(Temperature, false);
-                printLed(FanSpeed, true);
-        }
+void tempUp() {
+  storage.target++;
+  tempChanged = true;
 }
+
+void tempDown() {
+  storage.target--;
+  tempChanged = true;
+}
+
+void loadConfig() {
+  // To make sure there are settings, and they are YOURS!
+  // If nothing is found it will use the default settings.
+  if (EEPROM.read(CONFIG_START + 0) == CONFIG_VERSION[0] &&
+      EEPROM.read(CONFIG_START + 1) == CONFIG_VERSION[1] &&
+      EEPROM.read(CONFIG_START + 2) == CONFIG_VERSION[2])
+    for (unsigned int t = 0; t < sizeof(storage); t++)
+      *((char*)&storage + t) = EEPROM.read(CONFIG_START + t);
+}
+
+void saveConfig() {
+  for (unsigned int t = 0; t < sizeof(storage); t++)
+    EEPROM.update(CONFIG_START + t, *((char*)&storage + t));
+}
+
+char decompose(int v) {
+  char value[4];
+
+  bool negative = false;
+
+  if (v < -999 || v > 9999)
+    return;
+  if (v < 0) {
+    negative = true;
+    v = v * -1;
+  }
+  value[0] = v % 10;
+  v = v / 10;
+  value[1] = v % 10;
+  v = v / 10;
+  value[2] = v % 10;
+  v = v / 10;
+  value[3] = v;
+
+  return value;
+}
+
+void printSeg() {
+  char outp[8];
+  if (tempChanged) {
+  } else {
+    sprintf(outp, "%i", decompose(map(duty, 0, 255, 0, 100)) + decompose(temp));
+  }
+
+  writeSeg(outp);
+}
+
+void writeSeg(char string[8]) {
+  for (byte i = 7; i > 0; i--) {
+    lc.setChar(0, i, string[i], false);
+  }
+}
+
+void setup()
+{
+  pinMode(SpdIn, INPUT_PULLUP);
+
+  attachInterrupt(digitalPinToInterrupt(SpdIn), pickrpm, FALLING);
+
+  attachInterrupt(digitalPinToInterrupt(tempUpPin), tempUp, RISING);
+  attachInterrupt(digitalPinToInterrupt(tempDownPin), tempDown, RISING);
+
+  // Configure Timer 4 (Pin 6)
+  pwm6configure();
+
+  // Prepare pin 6 to use PWM
+  // We need to call pwm6configure
+  // For now, we set it at 0%
+  pwmSet6(15);
+
+  loadConfig();
+
+  myPID.SetSampleTime(1000);
+  myPID.SetOutputLimits(15, 255);
+  myPID.SetMode(AUTOMATIC);
+
+  lc.shutdown(0, false);
+  /* Set the brightness */
+  lc.setIntensity(0, 1);
+  /* and clear the display */
+  lc.clearDisplay(0);
+
+  Serial.begin(19200);
+  //while (!Serial) {}
+  Serial.println("Fans...Ready.\n\n");
+  prev1, prev2 = micros();
+}
+
+void loop()
+{
+  unsigned long cur = micros();
+
+  myPID.Compute();
+
+  if (cur - prev1 >= wait) {
+    prev1 = cur;
+    unsigned long _duration = duration;
+    unsigned long _ticks = ticks;
+    duration = 0;
+
+
+    float Freq = (1e6 / float(_duration) * _ticks) / 2;
+    Speed = Freq * 60;
+
+    ticks = 0;
+
+
+    PWM6 = duty;
+
+    printSeg();
+    Serial.print(duty);
+    Serial.print("% - ");
+    Serial.print (Speed, DEC);
+    Serial.println(" RPM");
+  }
+}
+
