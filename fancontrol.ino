@@ -22,7 +22,7 @@
 #include <LedControl.h>
 #include <EEPROM.h>
 
-#define CONFIG_VERSION "fan"
+#define CONFIG_VERSION "f02"
 // Tell it where to store your config data in EEPROM
 #define CONFIG_START 32
 
@@ -88,24 +88,25 @@ byte tempUpPin = 1, tempDownPin = 2;              // Up/Down buttons pinout
 volatile unsigned long duration = 0; // accumulates pulse width
 volatile unsigned int pulsecount = 0;
 volatile unsigned long previousMicros = 0;
-int ticks = 0, Speed = 0;
+int ticks = 0, speed = 0;
 
 long wait = 1e6;  // Time to wait between updates. In micros
 unsigned long prev1, prev2; // Timer placeholders
 
 double duty;
-double temp = 30;
+double temp = 41;
 
-bool tempChanged = false;
+bool fanRunning = true;
+bool targetChanged = false;
 
 
-PID myPID(&temp, &duty, &storage.target, 0, 0, 1, DIRECT);
+PID myPID(&temp, &duty, &storage.target, 0.2, 0, 1, REVERSE);
 LedControl lc = LedControl(segDin, segClk, segCs, 1);
 
 //  Called when hall sensor pulses
 void pickrpm ()
 {
-  unsigned long currentMicros = micros();
+  volatile unsigned long currentMicros = micros();
 
   if (currentMicros - previousMicros > 20000) {   // Prevent pulses less than 20k micros far.
     duration += currentMicros - previousMicros;
@@ -116,12 +117,12 @@ void pickrpm ()
 
 void tempUp() {
   storage.target++;
-  tempChanged = true;
+  targetChanged = true;
 }
 
 void tempDown() {
   storage.target--;
-  tempChanged = true;
+  targetChanged = true;
 }
 
 void loadConfig() {
@@ -139,36 +140,26 @@ void saveConfig() {
     EEPROM.update(CONFIG_START + t, *((char*)&storage + t));
 }
 
-char decompose(int v) {
-  char value[4];
-
-  bool negative = false;
-
-  if (v < -999 || v > 9999)
-    return;
-  if (v < 0) {
-    negative = true;
-    v = v * -1;
-  }
-  value[0] = v % 10;
-  v = v / 10;
-  value[1] = v % 10;
-  v = v / 10;
-  value[2] = v % 10;
-  v = v / 10;
-  value[3] = v;
-
-  return value;
-}
-
 void printSeg() {
-  char outp[8];
-  if (tempChanged) {
+  char buf[8] = "";
+  char tmp[4] = "";
+
+  if (targetChanged) {
+    strcat(buf, "Set ");
+    sprintf(tmp, "%3uC", (int)storage.target);
+    strcat(buf, tmp);
   } else {
-    sprintf(outp, "%i", decompose(map(duty, 0, 255, 0, 100)) + decompose(temp));
+    sprintf(buf, "%3uC", (int)temp);
+
+    if (fanRunning) {
+      sprintf(tmp, "%4u", (int)duty);
+      strcat(buf, tmp);
+    }
+    else
+      strcat(buf, " OFF");
   }
 
-  writeSeg(outp);
+  writeSeg(buf);
 }
 
 void writeSeg(char string[8]) {
@@ -183,8 +174,8 @@ void setup()
 
   attachInterrupt(digitalPinToInterrupt(SpdIn), pickrpm, FALLING);
 
-  attachInterrupt(digitalPinToInterrupt(tempUpPin), tempUp, RISING);
-  attachInterrupt(digitalPinToInterrupt(tempDownPin), tempDown, RISING);
+  //attachInterrupt(digitalPinToInterrupt(tempUpPin), tempUp, RISING);
+  //attachInterrupt(digitalPinToInterrupt(tempDownPin), tempDown, RISING);
 
   // Configure Timer 4 (Pin 6)
   pwm6configure();
@@ -197,7 +188,7 @@ void setup()
   loadConfig();
 
   myPID.SetSampleTime(1000);
-  myPID.SetOutputLimits(15, 255);
+  //myPID.SetOutputLimits(30, 255);
   myPID.SetMode(AUTOMATIC);
 
   lc.shutdown(0, false);
@@ -207,7 +198,7 @@ void setup()
   lc.clearDisplay(0);
 
   Serial.begin(19200);
-  //while (!Serial) {}
+  while (!Serial) {}
   Serial.println("Fans...Ready.\n\n");
   prev1, prev2 = micros();
 }
@@ -226,18 +217,16 @@ void loop()
 
 
     float Freq = (1e6 / float(_duration) * _ticks) / 2;
-    Speed = Freq * 60;
-
+    speed = Freq * 60;
     ticks = 0;
-
 
     PWM6 = duty;
 
     printSeg();
-    Serial.print(duty);
-    Serial.print("% - ");
-    Serial.print (Speed, DEC);
-    Serial.println(" RPM");
+
+    char prnt[] = "";
+    sprintf(prnt, "Target %uC - Temp %uC - Duty %u", (int)storage.target, (int)temp, (int)duty);
+    Serial.println(prnt);
   }
 }
 
