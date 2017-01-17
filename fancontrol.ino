@@ -82,8 +82,12 @@ struct StoreStruct {
 /*        Pinouts       */
 byte SpdIn = 7;                             // Hall sensor reading pinout
 byte segDin = 15, segClk = 16, segCs = 14;  // 7-segment display pinout
+byte relay = 4;                             // Relay input pin
+
 byte tempIn = 4;                            // Temperature sensor pinout
-byte tempUpPin = 1, tempDownPin = 2;              // Up/Down buttons pinout
+byte targetUp = 2, targetDown = 3;        // Up/Down buttons pinout
+bool targetChanged = false;
+bool upChanged = false, downChanged = false;
 
 volatile unsigned long duration = 0; // accumulates pulse width
 volatile unsigned int pulsecount = 0;
@@ -91,16 +95,16 @@ volatile unsigned long previousMicros = 0;
 int ticks = 0, speed = 0;
 
 long wait = 1e6;  // Time to wait between updates. In micros
-unsigned long prev1, prev2; // Timer placeholders
+unsigned long prev1, prev2 = 0; // Timer placeholders
 
 double duty;
-double temp = 41;
+double temp = 40;
+
+byte minDuty = 25;
 
 bool fanRunning = true;
-bool targetChanged = false;
 
-
-PID myPID(&temp, &duty, &storage.target, 0.2, 0, 1, REVERSE);
+PID fanPID(&temp, &duty, &storage.target, 4, 1, 0.2, REVERSE);
 LedControl lc = LedControl(segDin, segClk, segCs, 1);
 
 //  Called when hall sensor pulses
@@ -113,16 +117,6 @@ void pickrpm ()
     previousMicros = currentMicros;
     ticks++;
   }
-}
-
-void tempUp() {
-  storage.target++;
-  targetChanged = true;
-}
-
-void tempDown() {
-  storage.target--;
-  targetChanged = true;
 }
 
 void loadConfig() {
@@ -140,56 +134,56 @@ void saveConfig() {
     EEPROM.update(CONFIG_START + t, *((char*)&storage + t));
 }
 
+// Routine that updates the display
 void printSeg() {
   char buf[8] = "";
   char tmp[4] = "";
 
+  Serial.println(targetChanged);
+
   if (targetChanged) {
     strcat(buf, "Set ");
-    sprintf(tmp, "%3uC", (int)storage.target);
+    sprintf(tmp, "%3uC", round(storage.target));
     strcat(buf, tmp);
   } else {
     sprintf(buf, "%3uC", (int)temp);
 
     if (fanRunning) {
-      sprintf(tmp, "%4u", (int)duty);
+      sprintf(tmp, "%4u", map(duty, 0, 255, 0, 100));
       strcat(buf, tmp);
     }
     else
-      strcat(buf, " OFF");
+      strcat(buf, " 0FF");
   }
+
+  //Serial.println(buf);
 
   writeSeg(buf);
 }
 
 void writeSeg(char string[8]) {
-  for (byte i = 7; i > 0; i--) {
-    lc.setChar(0, i, string[i], false);
+  for (byte i = 0; i < 8; i++) {
+    lc.setChar(0, 7 - i, string[i], false);
   }
 }
 
 void setup()
 {
-  pinMode(SpdIn, INPUT_PULLUP);
+  pinMode(SpdIn, INPUT);
+  pinMode(relay, OUTPUT);
+  pinMode(targetUp, INPUT_PULLUP);
+  pinMode(targetDown, INPUT_PULLUP);
 
   attachInterrupt(digitalPinToInterrupt(SpdIn), pickrpm, FALLING);
-
-  //attachInterrupt(digitalPinToInterrupt(tempUpPin), tempUp, RISING);
-  //attachInterrupt(digitalPinToInterrupt(tempDownPin), tempDown, RISING);
 
   // Configure Timer 4 (Pin 6)
   pwm6configure();
 
-  // Prepare pin 6 to use PWM
-  // We need to call pwm6configure
-  // For now, we set it at 0%
-  pwmSet6(15);
-
   loadConfig();
 
-  myPID.SetSampleTime(1000);
-  //myPID.SetOutputLimits(30, 255);
-  myPID.SetMode(AUTOMATIC);
+  fanPID.SetSampleTime(1000);
+  fanPID.SetOutputLimits(minDuty - 1, 255);
+  fanPID.SetMode(AUTOMATIC);
 
   lc.shutdown(0, false);
   /* Set the brightness */
@@ -198,16 +192,22 @@ void setup()
   lc.clearDisplay(0);
 
   Serial.begin(19200);
-  while (!Serial) {}
-  Serial.println("Fans...Ready.\n\n");
-  prev1, prev2 = micros();
+  //while (!Serial) {}
+  Serial.print("Fans...");
+  pwmSet6(255);
+  writeSeg("Fan ctrl");
+  delay(5000);
+  Serial.println("Ready\n\n");
+
+  prev1 = micros();
 }
 
 void loop()
 {
   unsigned long cur = micros();
+  bool shouldPrint = false;
 
-  myPID.Compute();
+  fanPID.Compute();
 
   if (cur - prev1 >= wait) {
     prev1 = cur;
@@ -215,18 +215,65 @@ void loop()
     unsigned long _ticks = ticks;
     duration = 0;
 
-
     float Freq = (1e6 / float(_duration) * _ticks) / 2;
+    Serial.println(_ticks);
     speed = Freq * 60;
     ticks = 0;
 
-    PWM6 = duty;
+    if (round(duty) < minDuty) {
+      digitalWrite(relay, HIGH);
+      PWM6 = 0;
+      fanRunning = false;
+    }
+    else {
+      fanRunning = true;
+      PWM6 = duty;
+      digitalWrite(relay, LOW);
+    }
 
-    printSeg();
+    shouldPrint = true;
 
     char prnt[] = "";
-    sprintf(prnt, "Target %uC - Temp %uC - Duty %u", (int)storage.target, (int)temp, (int)duty);
+    if (Serial)
+      sprintf(prnt, "Target %uC - Temp %uC - Duty %u", (int)storage.target, (int)temp, round(duty));
     Serial.println(prnt);
   }
+
+  if (targetChanged && cur - prev2 >= 3e6)
+    targetChanged = false;
+
+  if (digitalRead(targetUp)) {
+    if (!upChanged) {
+      storage.target++;
+      targetChanged = true;
+      upChanged = true;
+
+      shouldPrint = true;
+
+      prev2 = micros();
+    }
+  } else {
+    upChanged = false;
+  }
+
+  if (digitalRead(targetDown)) {
+    if (!downChanged) {
+      storage.target--;
+      targetChanged = true;
+      downChanged = true;
+
+      shouldPrint = true;
+
+      prev2 = micros();
+    }
+  } else {
+    downChanged = false;
+  }
+
+  if (Serial.available() > 0)
+    temp = Serial.parseFloat();
+
+  if (shouldPrint)
+    printSeg();
 }
 
