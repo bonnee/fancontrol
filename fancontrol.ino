@@ -86,8 +86,9 @@ byte relay = 4;                             // Relay input pin
 
 byte tempIn = 4;                            // Temperature sensor pinout
 byte targetUp = 2, targetDown = 3;        // Up/Down buttons pinout
-bool targetChanged = false;
-bool upChanged = false, downChanged = false;
+bool targetMode = false;
+bool lastUp = false, lastDown = false;
+bool up, down = false;
 
 volatile unsigned long duration = 0; // accumulates pulse width
 volatile unsigned int pulsecount = 0;
@@ -139,9 +140,9 @@ void printSeg() {
   char buf[8] = "";
   char tmp[4] = "";
 
-  Serial.println(targetChanged);
+  Serial.println(targetMode);
 
-  if (targetChanged) {
+  if (targetMode) {
     strcat(buf, "Set ");
     sprintf(tmp, "%3uC", round(storage.target));
     strcat(buf, tmp);
@@ -207,6 +208,11 @@ void loop()
   unsigned long cur = micros();
   bool shouldPrint = false;
 
+  lastUp = up;
+  lastDown = down;
+  up = !digitalRead(targetUp);
+  down = !digitalRead(targetDown);
+
   fanPID.Compute();
 
   if (cur - prev1 >= wait) {
@@ -239,35 +245,23 @@ void loop()
     Serial.println(prnt);
   }
 
-  if (targetChanged && cur - prev2 >= 3e6)
-    targetChanged = false;
-
-  if (digitalRead(targetUp)) {
-    if (!upChanged) {
-      storage.target++;
-      targetChanged = true;
-      upChanged = true;
-
-      shouldPrint = true;
-
-      prev2 = micros();
-    }
-  } else {
-    upChanged = false;
+  if (up && !lastUp == up && targetMode) {
+    storage.target++;
   }
 
-  if (digitalRead(targetDown)) {
-    if (!downChanged) {
-      storage.target--;
-      targetChanged = true;
-      downChanged = true;
+  if (down && !lastDown == down && targetMode) {
+    storage.target--;
+  }
 
-      shouldPrint = true;
+  if (targetMode && cur - prev2 >= 3e6) {
+    targetMode = false;
+    shouldPrint = true;
+  }
 
-      prev2 = micros();
-    }
-  } else {
-    downChanged = false;
+  if (up || down) {
+    targetMode = true;
+    shouldPrint = true;
+    prev2 = micros();
   }
 
   if (Serial.available() > 0)
