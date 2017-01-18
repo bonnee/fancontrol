@@ -19,6 +19,7 @@
 */
 
 #include <PID_v1.h>
+#include <DHT.h>
 #include <LedControl.h>
 #include <EEPROM.h>
 
@@ -84,7 +85,7 @@ byte SpdIn = 7;                             // Hall sensor reading pinout
 byte segDin = 15, segClk = 16, segCs = 14;  // 7-segment display pinout
 byte relay = 4;                             // Relay input pin
 
-byte tempIn = 4;                            // Temperature sensor pinout
+byte tempIn = 5;                            // Temperature sensor pinout
 byte targetUp = 2, targetDown = 3;        // Up/Down buttons pinout
 bool targetMode = false;
 bool lastUp = false, lastDown = false;
@@ -107,6 +108,7 @@ bool fanRunning = true;
 
 PID fanPID(&temp, &duty, &storage.target, 4, 1, 0.2, REVERSE);
 LedControl lc = LedControl(segDin, segClk, segCs, 1);
+DHT sensor;
 
 //  Called when hall sensor pulses
 void pickrpm ()
@@ -182,6 +184,8 @@ void setup()
 
   loadConfig();
 
+  sensor.setup(tempIn);
+
   fanPID.SetSampleTime(1000);
   fanPID.SetOutputLimits(minDuty - 1, 255);
   fanPID.SetMode(AUTOMATIC);
@@ -212,6 +216,8 @@ void loop()
   lastDown = down;
   up = !digitalRead(targetUp);
   down = !digitalRead(targetDown);
+
+  temp = sensor.getTemperature();
 
   fanPID.Compute();
 
