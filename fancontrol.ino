@@ -96,11 +96,11 @@ volatile unsigned int pulsecount = 0;
 volatile unsigned long previousMicros = 0;
 int ticks = 0, speed = 0;
 
-long wait = 1e6;  // Time to wait between updates. In micros
-unsigned long prev1, prev2 = 0; // Timer placeholders
+long wait = 500;  // Time to wait between updates. In millis
+unsigned long prev1, prev2, prev3 = 0; // Timer placeholders
 
 double duty;
-double temp = 40;
+double temp;
 
 byte minDuty = 25;
 
@@ -142,24 +142,26 @@ void printSeg() {
   char buf[8] = "";
   char tmp[4] = "";
 
-  Serial.println(targetMode);
+  byte _duty = round(duty);
+  int _temp = round(temp);
+  int _target = round(storage.target);
 
   if (targetMode) {
     strcat(buf, "Set ");
-    sprintf(tmp, "%3uC", round(storage.target));
+    sprintf(tmp, "%3uC", _target);
     strcat(buf, tmp);
   } else {
-    sprintf(buf, "%3uC", (int)temp);
+    sprintf(buf, "%3uC", _temp);
 
     if (fanRunning) {
-      sprintf(tmp, "%4u", map(duty, 0, 255, 0, 100));
+      sprintf(tmp, "%4u", map(_duty, 0, 255, 0, 100));
       strcat(buf, tmp);
     }
-    else
+    else if (_duty == minDuty - 1)
       strcat(buf, " 0FF");
+    else
+      strcat(buf, " Err");
   }
-
-  //Serial.println(buf);
 
   writeSeg(buf);
 }
@@ -179,37 +181,35 @@ void setup()
 
   attachInterrupt(digitalPinToInterrupt(SpdIn), pickrpm, FALLING);
 
+  lc.clearDisplay(0);
+  lc.shutdown(0, false);
+  lc.setIntensity(0, 2);
+
+  writeSeg("Fan ctrl");
+
   // Configure Timer 4 (Pin 6)
   pwm6configure();
 
   loadConfig();
 
-  sensor.setup(tempIn);
-
-  fanPID.SetSampleTime(1000);
+  fanPID.SetSampleTime(500);
   fanPID.SetOutputLimits(minDuty - 1, 255);
   fanPID.SetMode(AUTOMATIC);
 
-  lc.shutdown(0, false);
-  /* Set the brightness */
-  lc.setIntensity(0, 1);
-  /* and clear the display */
-  lc.clearDisplay(0);
-
   Serial.begin(19200);
-  //while (!Serial) {}
+  //while (!Serial) {}    /*   WARNING: FOR DEBUG ONLY   */
   Serial.print("Fans...");
   pwmSet6(255);
-  writeSeg("Fan ctrl");
   delay(5000);
-  Serial.println("Ready\n\n");
+  sensor.setup(tempIn);
+  Serial.println("Ready.\n\n");
 
-  prev1 = micros();
+  prev1 = millis();
 }
 
 void loop()
 {
-  unsigned long cur = micros();
+  unsigned long cur = millis();
   bool shouldPrint = false;
 
   lastUp = up;
@@ -217,7 +217,10 @@ void loop()
   up = !digitalRead(targetUp);
   down = !digitalRead(targetDown);
 
-  temp = sensor.getTemperature();
+  if (cur - prev3 >= sensor.getMinimumSamplingPeriod()) {
+    prev3 = cur;
+    temp = sensor.getTemperature();
+  }
 
   fanPID.Compute();
 
@@ -228,7 +231,6 @@ void loop()
     duration = 0;
 
     float Freq = (1e6 / float(_duration) * _ticks) / 2;
-    Serial.println(_ticks);
     speed = Freq * 60;
     ticks = 0;
 
@@ -245,12 +247,21 @@ void loop()
 
     shouldPrint = true;
 
-    char prnt[] = "";
-    if (Serial)
-      sprintf(prnt, "Target %uC - Temp %uC - Duty %u", (int)storage.target, (int)temp, round(duty));
-    Serial.println(prnt);
+    //char prnt[] = "";
+
+    Serial.print("Target: ");
+    Serial.print(storage.target);
+    Serial.print(" - Temp: ");
+    Serial.print(temp);
+    Serial.print(" - Duty: ");
+    Serial.println(duty);
+      //sprintf(prnt, "Target %dC - Temp %dC - Duty %d", (int)storage.target, (int)temp, round(duty));
+    //Serial.println(prnt);
   }
 
+  /*
+    Checks if the +/- buttons are pressed and if it isn't the first time they've been pressed.
+  */
   if (up && !lastUp == up && targetMode) {
     storage.target++;
   }
@@ -259,15 +270,23 @@ void loop()
     storage.target--;
   }
 
-  if (targetMode && cur - prev2 >= 3e6) {
-    targetMode = false;
-    shouldPrint = true;
-  }
-
+  /*
+     If either + or - buttons are pressed, enter target mode and displays the current target.
+  */
   if (up || down) {
     targetMode = true;
     shouldPrint = true;
-    prev2 = micros();
+    prev2 = cur;
+  }
+
+  /*
+    If 3 secs have elapsed and no button is pressed, exits target mode.
+  */
+  if (targetMode && cur - prev2 >= 3000) {
+    targetMode = false;
+    shouldPrint = true;
+
+    saveConfig();
   }
 
   if (Serial.available() > 0)
