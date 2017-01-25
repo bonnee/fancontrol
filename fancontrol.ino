@@ -106,7 +106,7 @@ byte minDuty = 25;
 
 bool fanRunning = true;
 
-PID fanPID(&temp, &duty, &storage.target, 4, 1, 0.2, REVERSE);
+PID fanPID(&temp, &duty, &storage.target, 4, 1, 2, REVERSE);
 LedControl lc = LedControl(segDin, segClk, segCs, 1);
 DHT sensor;
 
@@ -219,7 +219,7 @@ void loop()
 
   if (cur - prev3 >= sensor.getMinimumSamplingPeriod()) {
     prev3 = cur;
-    temp = sensor.getTemperature();
+    temp = round(sensor.getTemperature());
   }
 
   fanPID.Compute();
@@ -247,16 +247,14 @@ void loop()
 
     shouldPrint = true;
 
-    //char prnt[] = "";
-
-    Serial.print("Target: ");
-    Serial.print(storage.target);
-    Serial.print(" - Temp: ");
-    Serial.print(temp);
-    Serial.print(" - Duty: ");
-    Serial.println(duty);
-      //sprintf(prnt, "Target %dC - Temp %dC - Duty %d", (int)storage.target, (int)temp, round(duty));
-    //Serial.println(prnt);
+    if (Serial) {
+      Serial.print("Target: ");
+      Serial.print(storage.target);
+      Serial.print(" - Temp: ");
+      Serial.print(temp);
+      Serial.print(" - Duty: ");
+      Serial.println(duty);
+    }
   }
 
   /*
