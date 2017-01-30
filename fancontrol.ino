@@ -103,6 +103,7 @@ double duty;
 double temp;
 
 byte minDuty = 25;
+byte dutyDeadZone = 10;
 
 bool fanRunning = true;
 
@@ -153,14 +154,14 @@ void printSeg() {
   } else {
     sprintf(buf, "%3uC", _temp);
 
-    if (fanRunning) {
+    if (isnan(_duty)) {
+      strcat(buf, " Err");
+    } else if (fanRunning) {
       sprintf(tmp, "%4u", map(_duty, 0, 255, 0, 100));
       strcat(buf, tmp);
     }
-    else if (_duty < minDuty)
+    else if (!fanRunning)
       strcat(buf, " 0FF");
-    else
-      strcat(buf, " Err");
   }
 
   writeSeg(buf);
@@ -193,7 +194,7 @@ void setup()
   loadConfig();
 
   fanPID.SetSampleTime(500);
-  fanPID.SetOutputLimits(minDuty - 10, 255);
+  fanPID.SetOutputLimits(minDuty - dutyDeadZone, 255);
   fanPID.SetMode(AUTOMATIC);
 
   Serial.begin(19200);
@@ -224,7 +225,7 @@ void loop()
       if (!isnan(t))
         temp = t;
     } else {
-      prev3 = cur - 5000;
+      prev3 += 5000;
       sensor.setup(tempIn);
     }
   }
