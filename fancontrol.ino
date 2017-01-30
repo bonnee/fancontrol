@@ -82,11 +82,11 @@ struct StoreStruct {
 
 /*        Pinouts       */
 byte SpdIn = 7;                             // Hall sensor reading pinout
-byte segDin = 15, segClk = 16, segCs = 14;  // 7-segment display pinout
-byte relay = 4;                             // Relay input pin
+byte segDin = 16, segClk = 14, segCs = 15;  // 7-segment display pinout
+byte relay = 9;                             // Relay input pin
 
-byte tempIn = 5;                            // Temperature sensor pinout
-byte targetUp = 2, targetDown = 3;        // Up/Down buttons pinout
+byte tempIn = 4;                            // Temperature sensor pinout
+byte targetUp = 18, targetDown = 19;          // Up/Down buttons pinout
 bool targetMode = false;
 bool lastUp = false, lastDown = false;
 bool up, down = false;
@@ -106,7 +106,7 @@ byte minDuty = 25;
 
 bool fanRunning = true;
 
-PID fanPID(&temp, &duty, &storage.target, 4, 1, 2, REVERSE);
+PID fanPID(&temp, &duty, &storage.target, 1, 0.5, 1, REVERSE);
 LedControl lc = LedControl(segDin, segClk, segCs, 1);
 DHT sensor;
 
@@ -157,7 +157,7 @@ void printSeg() {
       sprintf(tmp, "%4u", map(_duty, 0, 255, 0, 100));
       strcat(buf, tmp);
     }
-    else if (_duty == minDuty - 1)
+    else if (_duty < minDuty)
       strcat(buf, " 0FF");
     else
       strcat(buf, " Err");
@@ -193,7 +193,7 @@ void setup()
   loadConfig();
 
   fanPID.SetSampleTime(500);
-  fanPID.SetOutputLimits(minDuty - 1, 255);
+  fanPID.SetOutputLimits(minDuty - 10, 255);
   fanPID.SetMode(AUTOMATIC);
 
   Serial.begin(19200);
@@ -218,8 +218,15 @@ void loop()
   down = !digitalRead(targetDown);
 
   if (cur - prev3 >= sensor.getMinimumSamplingPeriod()) {
-    prev3 = cur;
-    temp = round(sensor.getTemperature());
+    if (sensor.getStatus() == 0) {
+      prev3 = cur;
+      double t = sensor.getTemperature();
+      if (!isnan(t))
+        temp = t;
+    } else {
+      prev3 = cur - 5000;
+      sensor.setup(tempIn);
+    }
   }
 
   fanPID.Compute();
@@ -248,7 +255,8 @@ void loop()
     shouldPrint = true;
 
     if (Serial) {
-      Serial.print("Target: ");
+      Serial.print(sensor.getStatusString());
+      Serial.print(" - Target: ");
       Serial.print(storage.target);
       Serial.print(" - Temp: ");
       Serial.print(temp);
