@@ -15,7 +15,7 @@
    Keep the fan at 100% for 10 seconds;
    Repeat.
 
-  This code has been tested on a SparkFun Pro Micro 16MHz with up to 4 Arctic F12 PWM PST Fans connected to the same pin, and it works just fine.
+  This code has been tested on a SparkFu  n Pro Micro 16MHz with up to 4 Arctic F12 PWM PST Fans connected to the same connector.
 */
 
 #include <PID_v1.h>
@@ -85,12 +85,15 @@ byte SpdIn = 7;                             // Hall sensor reading pinout
 byte segDin = 16, segClk = 14, segCs = 15;  // 7-segment display pinout
 byte relay = 9;                             // Relay input pin
 
-byte tempIn = 4;                            // Temperature sensor pinout
-byte targetUp = 18, targetDown = 19;          // Up/Down buttons pinout
+byte tempIn = 4;                            // Temperature sensor input pin
+byte targetUp = 18, targetDown = 19;        // Up/Down buttons pinout
+
+
 bool targetMode = false;
 bool lastUp = false, lastDown = false;
 bool up, down = false;
 
+/*      RPM calculation vars      */
 volatile unsigned long duration = 0; // accumulates pulse width
 volatile unsigned int pulsecount = 0;
 volatile unsigned long previousMicros = 0;
@@ -102,8 +105,8 @@ unsigned long prev1, prev2, prev3 = 0; // Timer placeholders
 double duty;
 double temp;
 
-byte minDuty = 25;
-byte dutyDeadZone = 10;
+byte minDuty = 25;        // The minimum fans speed (0...255)
+byte dutyDeadZone = 25;   // The delta between the minimum output for the PID and minDuty (minDuty - dutyDeadZone).
 
 bool fanRunning = true;
 
@@ -112,7 +115,7 @@ LedControl lc = LedControl(segDin, segClk, segCs, 1);
 DHT sensor;
 
 //  Called when hall sensor pulses
-void pickrpm ()
+void pickRPM ()
 {
   volatile unsigned long currentMicros = micros();
 
@@ -124,8 +127,7 @@ void pickrpm ()
 }
 
 void loadConfig() {
-  // To make sure there are settings, and they are YOURS!
-  // If nothing is found it will use the default settings.
+  // Check if saved bytes have the same "version" and loads them. Otherwise it will load the default values.
   if (EEPROM.read(CONFIG_START + 0) == CONFIG_VERSION[0] &&
       EEPROM.read(CONFIG_START + 1) == CONFIG_VERSION[1] &&
       EEPROM.read(CONFIG_START + 2) == CONFIG_VERSION[2])
@@ -140,21 +142,22 @@ void saveConfig() {
 
 // Routine that updates the display
 void printSeg() {
-  char buf[8] = "";
-  char tmp[4] = "";
+  char buf[8] = "";   // The complete buffer to print
+  char tmp[4] = "";   // A temporary buffer to compose the string
 
+  // Values are rounded before printing, avoiding deciamls on the 7-seg
   byte _duty = round(duty);
   int _temp = round(temp);
   int _target = round(storage.target);
 
-  if (targetMode) {
+  if (targetMode) {   // If +/- have been pressed, show the target temp
     strcat(buf, "Set ");
     sprintf(tmp, "%3uC", _target);
     strcat(buf, tmp);
   } else {
     sprintf(buf, "%3uC", _temp);
 
-    if (isnan(_duty)) {
+    if (isnan(_duty)) {   // Error checking
       strcat(buf, " Err");
     } else if (fanRunning) {
       sprintf(tmp, "%4u", map(_duty, 0, 255, 0, 100));
@@ -180,7 +183,7 @@ void setup()
   pinMode(targetUp, INPUT_PULLUP);
   pinMode(targetDown, INPUT_PULLUP);
 
-  attachInterrupt(digitalPinToInterrupt(SpdIn), pickrpm, FALLING);
+  attachInterrupt(digitalPinToInterrupt(SpdIn), pickRPM, FALLING);
 
   lc.clearDisplay(0);
   lc.shutdown(0, false);
@@ -193,7 +196,7 @@ void setup()
 
   loadConfig();
 
-  fanPID.SetSampleTime(500);
+  fanPID.SetSampleTime(wait);
   fanPID.SetOutputLimits(minDuty - dutyDeadZone, 255);
   fanPID.SetMode(AUTOMATIC);
 
@@ -262,12 +265,12 @@ void loop()
       Serial.print(" - Temp: ");
       Serial.print(temp);
       Serial.print(" - Duty: ");
-      Serial.println(duty);
+      Serial.println(map(duty, 0, 255, 0, 100));
     }
   }
 
   /*
-    Checks if the +/- buttons are pressed and if it isn't the first time they've been pressed.
+    Checks if the +/- buttons are pressed and if it's not the first time they've been pressed.
   */
   if (up && !lastUp == up && targetMode) {
     storage.target++;
