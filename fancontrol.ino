@@ -15,7 +15,7 @@
    Keep the fan at 100% for 10 seconds;
    Repeat.
 
-  This code has been tested on a SparkFu  n Pro Micro 16MHz with up to 4 Arctic F12 PWM PST Fans connected to the same connector.
+  This code has been tested on a SparkFun Pro Micro 16MHz Clone with 4 Arctic F12 PWM PST Fans connected to the same connector.
 */
 
 #include <PID_v1.h>
@@ -81,12 +81,18 @@ struct StoreStruct {
 
 
 /*        Pinouts       */
-byte SpdIn = 7;                             // Hall sensor reading pinout
-byte segDin = 16, segClk = 14, segCs = 15;  // 7-segment display pinout
-byte relay = 9;                             // Relay input pin
+#define SPD_IN 7        // Hall sensor reading pinout
 
-byte tempIn = 4;                            // Temperature sensor input pin
-byte targetUp = 18, targetDown = 19;        // Up/Down buttons pinout
+                        // 7-segment display pinout
+#define SEG_DIN 16
+#define SEG_CLK 14
+#define SEG_CS 15
+
+#define RELAY 9         // Relay input pin
+
+#define TEMP_IN 4       // Temperature sensor input pin
+#define TARGET_UP 18    // Up/Down buttons pinout
+#define TARGET_DOWN 19
 
 
 bool targetMode = false;
@@ -111,7 +117,7 @@ byte dutyDeadZone = 25;   // The delta between the minimum output for the PID an
 bool fanRunning = true;
 
 PID fanPID(&temp, &duty, &storage.target, 1, 0.5, 1, REVERSE);
-LedControl lc = LedControl(segDin, segClk, segCs, 1);
+LedControl lc = LedControl(SEG_DIN, SEG_CLK, SEG_CS, 1);
 DHT sensor;
 
 //  Called when hall sensor pulses
@@ -178,12 +184,12 @@ void writeSeg(char string[8]) {
 
 void setup()
 {
-  pinMode(SpdIn, INPUT);
-  pinMode(relay, OUTPUT);
-  pinMode(targetUp, INPUT_PULLUP);
-  pinMode(targetDown, INPUT_PULLUP);
+  pinMode(SPD_IN, INPUT);
+  pinMode(RELAY, OUTPUT);
+  pinMode(TARGET_UP, INPUT_PULLUP);
+  pinMode(TARGET_DOWN, INPUT_PULLUP);
 
-  attachInterrupt(digitalPinToInterrupt(SpdIn), pickRPM, FALLING);
+  attachInterrupt(digitalPinToInterrupt(SPD_IN), pickRPM, FALLING);
 
   lc.clearDisplay(0);
   lc.shutdown(0, false);
@@ -205,7 +211,7 @@ void setup()
   Serial.print("Fans...");
   pwmSet6(255);
   delay(5000);
-  sensor.setup(tempIn);
+  sensor.setup(TEMP_IN);
   Serial.println("Ready.\n\n");
 
   prev1 = millis();
@@ -218,8 +224,8 @@ void loop()
 
   lastUp = up;
   lastDown = down;
-  up = !digitalRead(targetUp);
-  down = !digitalRead(targetDown);
+  up = !digitalRead(TARGET_UP);
+  down = !digitalRead(TARGET_DOWN);
 
   if (cur - prev3 >= sensor.getMinimumSamplingPeriod()) {
     if (sensor.getStatus() == 0) {
@@ -229,7 +235,7 @@ void loop()
         temp = t;
     } else {
       prev3 += 5000;
-      sensor.setup(tempIn);
+      sensor.setup(TEMP_IN);
     }
   }
 
@@ -246,14 +252,14 @@ void loop()
     ticks = 0;
 
     if (round(duty) < minDuty) {
-      digitalWrite(relay, HIGH);
+      digitalWrite(RELAY, HIGH);
       PWM6 = 0;
       fanRunning = false;
     }
     else {
       fanRunning = true;
       PWM6 = duty;
-      digitalWrite(relay, LOW);
+      digitalWrite(RELAY, LOW);
     }
 
     shouldPrint = true;
