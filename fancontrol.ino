@@ -83,7 +83,7 @@ struct StoreStruct {
 /*        Pinouts       */
 #define SPD_IN 7        // Hall sensor reading pinout
 
-                        // 7-segment display pinout
+// 7-segment display pinout
 #define SEG_DIN 16
 #define SEG_CLK 14
 #define SEG_CS 15
@@ -93,6 +93,8 @@ struct StoreStruct {
 #define TEMP_IN 4       // Temperature sensor input pin
 #define TARGET_UP 18    // Up/Down buttons pinout
 #define TARGET_DOWN 19
+
+#define DEBUG(x)  if(Serial) { Serial.println (x); }
 
 
 bool targetMode = false;
@@ -208,11 +210,11 @@ void setup()
 
   Serial.begin(19200);
   //while (!Serial) {}    /*   WARNING: FOR DEBUG ONLY   */
-  Serial.print("Fans...");
+  DEBUG("Fans...");
   pwmSet6(255);
   delay(5000);
   sensor.setup(TEMP_IN);
-  Serial.println("Ready.\n\n");
+  DEBUG("Ready.\n\n");
 
   prev1 = millis();
 }
@@ -264,15 +266,9 @@ void loop()
 
     shouldPrint = true;
 
-    if (Serial) {
-      Serial.print(sensor.getStatusString());
-      Serial.print(" - Target: ");
-      Serial.print(storage.target);
-      Serial.print(" - Temp: ");
-      Serial.print(temp);
-      Serial.print(" - Duty: ");
-      Serial.println(map(duty, 0, 255, 0, 100));
-    }
+    char *out = sprintf("%s - Target: %i - Temp: %i - Duty: %i", sensor.getStatusString(), round(storage.target), round(temp), map(duty, 0, 255, 0, 100));
+
+    DEBUG(out);
   }
 
   /*
@@ -304,9 +300,6 @@ void loop()
 
     saveConfig();
   }
-
-  if (Serial.available() > 0)
-    temp = Serial.parseFloat();
 
   if (shouldPrint)
     printSeg();
