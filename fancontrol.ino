@@ -23,8 +23,9 @@
 #include <LedControl.h>
 #include <EEPROM.h>
 
+// Change this if you want your current settings to be overwritten.
 #define CONFIG_VERSION "f02"
-// Tell it where to store your config data in EEPROM
+// Where to store config data in EEPROM
 #define CONFIG_START 32
 
 // Pin 6 shortcut
@@ -33,7 +34,62 @@
 // Terminal count
 #define PWM6_MAX OCR4C
 
-/* Configure the PWM clock*/
+/*        Pinouts       */
+#define SPD_IN 7        // RPM input pin
+
+// 7-segment display
+#define SEG_DIN 16
+#define SEG_CLK 14
+#define SEG_CS 15
+
+#define RELAY 9         // Relay output pin
+
+#define TEMP_IN 4       // Temperature sensor input pin
+#define TARGET_UP 18    // Up/Down buttons pins
+#define TARGET_DOWN 19
+
+// Debug macro to print messages to serial
+#define DEBUG(x)  if(Serial) { Serial.println (x); }
+
+// Tells the amount of time (in ms) to wait between updates
+#define WAIT 500
+
+#define DUTY_MIN 25        // The minimum fans speed (0...255)
+#define DUTY_DEAD_ZONE 25  // The delta between the minimum output for the PID and DUTY_MIN (DUTY_MIN - DUTY_DEAD_ZONE).
+
+/* Target set vars */
+bool targetMode = false;
+bool lastUp = false, lastDown = false;
+bool up, down = false;
+
+/* RPM calculation */
+volatile unsigned long duration = 0; // accumulates pulse width
+volatile unsigned int pulsecount = 0;
+volatile unsigned long previousMicros = 0;
+int ticks = 0, speed = 0;
+
+unsigned long prev1, prev2, prev3 = 0; // Time placeholders
+
+double duty;
+double temp;
+
+bool fanRunning = true;
+
+struct StoreStruct {
+  // This is for mere detection if they are your settings
+  char version[4];
+  // The variables of your settings
+  double target;
+} storage = { // Default values
+  CONFIG_VERSION,
+  40
+};
+
+PID fanPID(&temp, &duty, &storage.target, 1, 0.5, 1, REVERSE);
+LedControl lc = LedControl(SEG_DIN, SEG_CLK, SEG_CS, 1);
+DHT sensor;
+
+/* Configure the PWM clock */
 void pwm6configure()
 {
   // TCCR4B configuration
@@ -56,71 +112,10 @@ void pwm6configure()
 // Argument is PWM between 0 and 255
 void pwmSet6(int value)
 {
-  OCR4D = value; // Set PWM value
+  OCR4D = value;  // Set PWM value
   DDRD |= 1 << 7; // Set Output Mode D7
   TCCR4C |= 0x09; // Activate channel D
 }
-
-/*************** ADDITIONAL DEFINITIONS ******************/
-
-// Macro to converts from duty (0..100) to PWM (0..255)
-#define DUTY2PWM(x)  ((255*(x))/100)
-
-/**********************************************************/
-
-struct StoreStruct {
-  // This is for mere detection if they are your settings
-  char version[4];
-  // The variables of your settings
-  double target;
-} storage = {
-  CONFIG_VERSION,
-  // The default values
-  40
-};
-
-
-/*        Pinouts       */
-#define SPD_IN 7        // Hall sensor reading pinout
-
-// 7-segment display pinout
-#define SEG_DIN 16
-#define SEG_CLK 14
-#define SEG_CS 15
-
-#define RELAY 9         // Relay input pin
-
-#define TEMP_IN 4       // Temperature sensor input pin
-#define TARGET_UP 18    // Up/Down buttons pinout
-#define TARGET_DOWN 19
-
-#define DEBUG(x)  if(Serial) { Serial.println (x); }
-
-
-bool targetMode = false;
-bool lastUp = false, lastDown = false;
-bool up, down = false;
-
-/*      RPM calculation vars      */
-volatile unsigned long duration = 0; // accumulates pulse width
-volatile unsigned int pulsecount = 0;
-volatile unsigned long previousMicros = 0;
-int ticks = 0, speed = 0;
-
-long wait = 500;  // Time to wait between updates. In millis
-unsigned long prev1, prev2, prev3 = 0; // Timer placeholders
-
-double duty;
-double temp;
-
-byte minDuty = 25;        // The minimum fans speed (0...255)
-byte dutyDeadZone = 25;   // The delta between the minimum output for the PID and minDuty (minDuty - dutyDeadZone).
-
-bool fanRunning = true;
-
-PID fanPID(&temp, &duty, &storage.target, 1, 0.5, 1, REVERSE);
-LedControl lc = LedControl(SEG_DIN, SEG_CLK, SEG_CS, 1);
-DHT sensor;
 
 //  Called when hall sensor pulses
 void pickRPM ()
@@ -204,8 +199,8 @@ void setup()
 
   loadConfig();
 
-  fanPID.SetSampleTime(wait);
-  fanPID.SetOutputLimits(minDuty - dutyDeadZone, 255);
+  fanPID.SetSampleTime(WAIT);
+  fanPID.SetOutputLimits(DUTY_MIN - DUTY_DEAD_ZONE, 255);
   fanPID.SetMode(AUTOMATIC);
 
   Serial.begin(19200);
@@ -243,7 +238,7 @@ void loop()
 
   fanPID.Compute();
 
-  if (cur - prev1 >= wait) {
+  if (cur - prev1 >= WAIT) {
     prev1 = cur;
     unsigned long _duration = duration;
     unsigned long _ticks = ticks;
@@ -253,7 +248,7 @@ void loop()
     speed = Freq * 60;
     ticks = 0;
 
-    if (round(duty) < minDuty) {
+    if (round(duty) < DUTY_MIN) {
       digitalWrite(RELAY, HIGH);
       PWM6 = 0;
       fanRunning = false;
