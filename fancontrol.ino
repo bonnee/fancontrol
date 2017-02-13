@@ -143,6 +143,13 @@ void saveConfig() {
     EEPROM.update(CONFIG_START + t, *((char*)&storage + t));
 }
 
+void writeSeg(char string[8]) {
+  for (byte i = 0; i < 8; i++) {
+    lc.setChar(0, 7 - i, string[i], false);
+  }
+}
+
+
 // Routine that updates the display
 void printSeg() {
   char buf[8] = "";   // The complete buffer to print
@@ -171,12 +178,6 @@ void printSeg() {
   }
 
   writeSeg(buf);
-}
-
-void writeSeg(char string[8]) {
-  for (byte i = 0; i < 8; i++) {
-    lc.setChar(0, 7 - i, string[i], false);
-  }
 }
 
 void setup()
