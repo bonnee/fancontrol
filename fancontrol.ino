@@ -48,8 +48,9 @@
 #define TARGET_UP 18    // Up/Down buttons pins
 #define TARGET_DOWN 19
 
+#define DBG true
 // Debug macro to print messages to serial
-#define DEBUG(x)  if(Serial) { Serial.println (x); }
+#define DEBUG(x)  if(DBG && Serial) { Serial.print (x); }
 
 // Tells the amount of time (in ms) to wait between updates
 #define WAIT 500
@@ -262,9 +263,14 @@ void loop()
 
     shouldPrint = true;
 
-    char *out = sprintf("%c - Target: %i - Temp: %i - Duty: %i", sensor.getStatusString(), round(storage.target), round(temp), map(duty, 0, 255, 0, 100));
-
-    DEBUG(out);
+    DEBUG(sensor.getStatusString());
+    DEBUG(" - Target: ");
+    DEBUG(storage.target);
+    DEBUG(" - Temp: ");
+    DEBUG(temp);
+    DEBUG(" - Duty: ");
+    DEBUG(map(duty, 0, 255, 0, 100));
+    DEBUG("\n");
   }
 
   /*
