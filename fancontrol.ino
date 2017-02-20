@@ -231,7 +231,7 @@ void loop()
       prev3 = cur;
       double t = sensor.getTemperature();
       if (!isnan(t))
-        temp = t;
+        temp = round(t * 2.0) / 2.0;
     } else {
       prev3 += 5000;
       sensor.setup(TEMP_IN);
@@ -285,7 +285,7 @@ void loop()
   }
 
   /*
-     If either + or - buttons are pressed, enter target mode and displays the current target.
+     If either + or - buttons are pressed, enter target mode and display the current target on screen.
   */
   if (up || down) {
     targetMode = true;
@@ -294,7 +294,7 @@ void loop()
   }
 
   /*
-    If 3 secs have elapsed and no button is pressed, exits target mode.
+    If 3 secs have elapsed and no button is pressed, exit target mode.
   */
   if (targetMode && cur - prev2 >= 3000) {
     targetMode = false;
