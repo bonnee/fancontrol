@@ -24,7 +24,7 @@
 #include <EEPROM.h>
 
 // Change this if you want your current settings to be overwritten.
-#define CONFIG_VERSION "f02"
+#define CONFIG_VERSION "f01"
 // Where to store config data in EEPROM
 #define CONFIG_START 32
 
@@ -262,7 +262,7 @@ void loop()
 
     shouldPrint = true;
 
-    char *out = sprintf("%s - Target: %i - Temp: %i - Duty: %i", sensor.getStatusString(), round(storage.target), round(temp), map(duty, 0, 255, 0, 100));
+    char *out = sprintf("%c - Target: %i - Temp: %i - Duty: %i", sensor.getStatusString(), round(storage.target), round(temp), map(duty, 0, 255, 0, 100));
 
     DEBUG(out);
   }
@@ -270,11 +270,11 @@ void loop()
   /*
     Checks if the +/- buttons are pressed and if it's not the first time they've been pressed.
   */
-  if (up && !lastUp == up && targetMode) {
+  if (up && !lastUp == up && targetMode && storage.target < 255) {
     storage.target++;
   }
 
-  if (down && !lastDown == down && targetMode) {
+  if (down && !lastDown == down && targetMode && storage.target > 0) {
     storage.target--;
   }
 
