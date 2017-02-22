@@ -55,8 +55,8 @@
 // Tells the amount of time (in ms) to wait between updates
 #define WAIT 500
 
-#define DUTY_MIN 25        // The minimum fans speed (0...255)
-#define DUTY_DEAD_ZONE 25  // The delta between the minimum output for the PID and DUTY_MIN (DUTY_MIN - DUTY_DEAD_ZONE).
+#define DUTY_MIN 64        // The minimum fans speed (0...255)
+#define DUTY_DEAD_ZONE 64  // The delta between the minimum output for the PID and DUTY_MIN (DUTY_MIN - DUTY_DEAD_ZONE).
 
 /* Target set vars */
 bool targetMode = false;
@@ -88,7 +88,7 @@ struct StoreStruct
   40
 };
 
-PID fanPID(&ctemp, &duty, &storage.target, 1, 0.5, 1, REVERSE);
+PID fanPID(&ctemp, &duty, &storage.target, 1, 0.5, 0.05, REVERSE);
 LedControl lc = LedControl(SEG_DIN, SEG_CLK, SEG_CS, 1);
 DHT sensor;
 
@@ -209,7 +209,7 @@ void writeRight()
     char tmp[5];
     if (fanRunning)
     {
-      sprintf(tmp, "%4u", round(duty));
+      sprintf(tmp, "%4u", map(round(duty), 0, 255, 0, 100));
     }
     else
     {
@@ -237,7 +237,7 @@ void setup()
 
   lc.clearDisplay(0);
   lc.shutdown(0, false);
-  lc.setIntensity(0, 2);
+  lc.setIntensity(0, 15);
 
   writeSeg("Fan Ctrl", 0);
 
@@ -322,9 +322,9 @@ void loop()
     DEBUG(" - Target: ");
     DEBUG(storage.target);
     DEBUG(" - Temp: ");
-    DEBUG(dtemp);
+    DEBUG(ctemp);
     DEBUG(" - Duty: ");
-    DEBUG(map(duty, 0, 255, 0, 100));
+    DEBUG(map(round(duty), 0, 255, 0, 100));
     DEBUG("\n");
   }
 
