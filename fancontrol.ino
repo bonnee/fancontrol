@@ -72,11 +72,13 @@ int ticks = 0, speed = 0;
 unsigned long prev1, prev2, prev3 = 0; // Time placeholders
 
 double duty;
-double temp;
+// Display temp, .5 rounded and Compute temp, integer (double for PID library);
+double dtemp, ctemp;
 
 bool fanRunning = true;
 
-struct StoreStruct {
+struct StoreStruct
+{
   // This is for mere detection if they are your settings
   char version[4];
   // The variables of your settings
@@ -86,7 +88,7 @@ struct StoreStruct {
   40
 };
 
-PID fanPID(&temp, &duty, &storage.target, 1, 0.5, 1, REVERSE);
+PID fanPID(&ctemp, &duty, &storage.target, 1, 0.5, 1, REVERSE);
 LedControl lc = LedControl(SEG_DIN, SEG_CLK, SEG_CS, 1);
 DHT sensor;
 
@@ -130,7 +132,8 @@ void pickRPM ()
   }
 }
 
-void loadConfig() {
+void loadConfig()
+{
   // Check if saved bytes have the same "version" and loads them. Otherwise it will load the default values.
   if (EEPROM.read(CONFIG_START + 0) == CONFIG_VERSION[0] &&
       EEPROM.read(CONFIG_START + 1) == CONFIG_VERSION[1] &&
@@ -139,46 +142,88 @@ void loadConfig() {
       *((char*)&storage + t) = EEPROM.read(CONFIG_START + t);
 }
 
-void saveConfig() {
+void saveConfig()
+{
   for (unsigned int t = 0; t < sizeof(storage); t++)
     EEPROM.update(CONFIG_START + t, *((char*)&storage + t));
 }
 
-void writeSeg(char string[8]) {
-  for (byte i = 0; i < 8; i++) {
-    lc.setChar(0, 7 - i, string[i], false);
+void writeSeg(char str[], byte index)
+{
+  int size = strlen(str);
+
+  for (int i = 0; i < size; i++)
+  {
+    lc.setChar(0, index + i, str[(size - 1) - i], false);
   }
 }
 
+void writeTemp(float temp, byte off, bool dInt = false)
+{
+  byte t[3];
 
-// Routine that updates the display
-void printSeg() {
-  char buf[8] = "";   // The complete buffer to print
-  char tmp[4] = "";   // A temporary buffer to compose the string
-
-  // Values are rounded before printing, avoiding deciamls on the 7-seg
-  byte _duty = round(duty);
-  int _temp = round(temp);
-  int _target = round(storage.target);
-
-  if (targetMode) {   // If +/- have been pressed, show the target temp
-    strcat(buf, "Set ");
-    sprintf(tmp, "%3uC", _target);
-    strcat(buf, tmp);
-  } else {
-    sprintf(buf, "%3uC", _temp);
-
-    if (isnan(_duty)) {   // Error checking
-      strcat(buf, " Err");
-    } else if (fanRunning) {
-      sprintf(tmp, "%4u", map(_duty, 0, 255, 0, 100));
-      strcat(buf, tmp);
-    }
-    else if (!fanRunning)
-      strcat(buf, " 0FF");
+  if (!dInt)
+  {
+    temp *= 10;
   }
 
-  writeSeg(buf);
+  t[0] = (int)temp % 10;
+  temp /= 10;
+
+  t[1] = (int)temp % 10;
+
+  if (!dInt)
+  {
+    temp /= 10;
+    t[2] = (int)temp % 10;
+  }
+
+
+  for (byte i = 1; i < 4; i++)
+  {
+    lc.setDigit(0, i + off, t[i - 1], (i == 2 && !dInt));
+  }
+  lc.setChar(0, off, 'C', false);
+}
+
+void writeLeft()
+{
+  if (targetMode)
+  {
+    writeSeg("Set ", 4);
+  }
+  else
+  {
+    writeTemp(dtemp, 4);
+  }
+}
+
+void writeRight()
+{
+  if (targetMode)
+  {
+    writeTemp(storage.target, 0, true);
+  }
+  else
+  {
+    char tmp[5];
+    if (fanRunning)
+    {
+      sprintf(tmp, "%4u", round(duty));
+    }
+    else
+    {
+      strcpy(tmp, " 0ff");
+    }
+    writeSeg(tmp, 0);
+  }
+}
+
+// Routine that updates the display
+void printSeg()
+{
+  writeRight();
+  writeLeft();
 }
 
 void setup()
@@ -194,7 +239,7 @@ void setup()
   lc.shutdown(0, false);
   lc.setIntensity(0, 2);
 
-  writeSeg("Fan ctrl");
+  writeSeg("Fan Ctrl", 0);
 
   // Configure Timer 4 (Pin 6)
   pwm6configure();
@@ -212,6 +257,7 @@ void setup()
   delay(5000);
   sensor.setup(TEMP_IN);
   DEBUG("Ready.\n\n");
+  lc.clearDisplay(0);
 
   prev1 = millis();
 }
@@ -226,13 +272,19 @@ void loop()
   up = !digitalRead(TARGET_UP);
   down = !digitalRead(TARGET_DOWN);
 
-  if (cur - prev3 >= sensor.getMinimumSamplingPeriod()) {
-    if (sensor.getStatus() == 0) {
+  if (cur - prev3 >= sensor.getMinimumSamplingPeriod())
+  {
+    if (sensor.getStatus() == 0)
+    {
       prev3 = cur;
       double t = sensor.getTemperature();
       if (!isnan(t))
-        temp = round(t * 2.0) / 2.0;
-    } else {
+      {
+        dtemp = round(t * 2.0) / 2.0;
+        ctemp = round(t);
+      }
+    } else
+    {
       prev3 += 5000;
       sensor.setup(TEMP_IN);
     }
@@ -240,7 +292,8 @@ void loop()
 
   fanPID.Compute();
 
-  if (cur - prev1 >= WAIT) {
+  if (cur - prev1 >= WAIT)
+  {
     prev1 = cur;
     unsigned long _duration = duration;
     unsigned long _ticks = ticks;
@@ -250,12 +303,14 @@ void loop()
     speed = Freq * 60;
     ticks = 0;
 
-    if (round(duty) < DUTY_MIN) {
+    if (round(duty) < DUTY_MIN)
+    {
       digitalWrite(RELAY, HIGH);
       PWM6 = 0;
       fanRunning = false;
     }
-    else {
+    else
+    {
       fanRunning = true;
       PWM6 = duty;
       digitalWrite(RELAY, LOW);
@@ -267,7 +322,7 @@ void loop()
     DEBUG(" - Target: ");
     DEBUG(storage.target);
     DEBUG(" - Temp: ");
-    DEBUG(temp);
+    DEBUG(dtemp);
     DEBUG(" - Duty: ");
     DEBUG(map(duty, 0, 255, 0, 100));
     DEBUG("\n");
@@ -276,18 +331,21 @@ void loop()
   /*
     Checks if the +/- buttons are pressed and if it's not the first time they've been pressed.
   */
-  if (up && !lastUp == up && targetMode && storage.target < 255) {
+  if (up && !lastUp == up && targetMode && storage.target < 255)
+  {
     storage.target++;
   }
 
-  if (down && !lastDown == down && targetMode && storage.target > 0) {
+  if (down && !lastDown == down && targetMode && storage.target > 0)
+  {
     storage.target--;
   }
 
   /*
      If either + or - buttons are pressed, enter target mode and display the current target on screen.
   */
-  if (up || down) {
+  if (up || down)
+  {
     targetMode = true;
     shouldPrint = true;
     prev2 = cur;
@@ -296,7 +354,8 @@ void loop()
   /*
     If 3 secs have elapsed and no button is pressed, exit target mode.
   */
-  if (targetMode && cur - prev2 >= 3000) {
+  if (targetMode && cur - prev2 >= 3000)
+  {
     targetMode = false;
     shouldPrint = true;
 
