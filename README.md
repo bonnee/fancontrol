@@ -1,5 +1,6 @@
 # Fancontrol.ino
 Arduino PWM DC fan control
+## Check out [the instructable related to this project!](https://www.instructables.com/id/Temperature-Control-With-Arduino-and-PWM-Fans/)
 
 This project is meant to control the temperature of a network/server rack by using 4 ceiling-mounted temperature-driven BLDC 12V PWM Fans using an Arduino board.
 
@@ -25,8 +26,7 @@ The target temperature will be set using 2 push buttons (+/-) placed next to the
 
 ## 5. Providing power
 
-12V are delivered by a standard power supply . A cheap LM2596-based buck converter will be used to power the logic board.
-
+12V and 5V are delivered by a standard dual-power supply.
 
 The system is mounted on the rack's ceiling, sitting in a custom box, made from an acrylic panel for the bottom and 4 L-shaped profiles for the sides.
 
