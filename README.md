@@ -27,7 +27,3 @@ The target temperature will be set using 2 push buttons (+/-) placed next to the
 ## 5. Providing power
 
 12V and 5V are delivered by a standard dual-power supply.
-
-The system is mounted on the rack's ceiling, sitting in a custom box, made from an acrylic panel for the bottom and 4 L-shaped profiles for the sides.
-
-The front panel (display and buttons) is mounted on an alluminium bar wich is rack-mounted for improved visibility.
