@@ -8,13 +8,6 @@
   Note that the 32u4 has 2 pins (6 and 13) hooked to Timer4, but since my board doesn't have pin 13 I only configure pin 6.
   A RPM reading system is also featured in this example (although it has proven to be not that accurate, at least on my setup).
 
-  The sketch will:
-   Fade the fan down to 15%;
-   Keep the fan at 15% for 10 seconds;
-   Fade it up to 100%;
-   Keep the fan at 100% for 10 seconds;
-   Repeat.
-
   This code has been tested on a SparkFun Pro Micro 16MHz Clone with 4 Arctic F12 PWM PST Fans connected to the same connector.
 */
 
