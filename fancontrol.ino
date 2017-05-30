@@ -1,5 +1,17 @@
-/*    DC PWM Fan controller
-  This software is meant to drive one or multiple PC fans through an Atmel 32u4 based controller.
+/*    fancontrol
+ *
+ * fancontrol is free software.
+ * Copyright (C) 2017 Matteo Bonora (bonora.matteo@gmail.com) - All Rights Reserved
+ *
+ * fancontrol is available under the GNU LGPLv3 License which is available at <http://www.gnu.org/licenses/lgpl.html>
+*/
+
+/*
+  This is a temperature-based fan controller using PID logic and PWM signals to control PC fans.
+
+  Check out my instructable on this project for more info
+  https://www.instructables.com/id/Temperature-Control-With-Arduino-and-PWM-Fans/
+  
   The PWM frequency is set to 23437 Hz that is within the 21k-25k Hz range so it should work with any PC fan.
   For more details on how PWM works on the 32u4, check this link:
 
@@ -11,9 +23,9 @@
   This code has been tested on a SparkFun Pro Micro 16MHz Clone with 4 Arctic F12 PWM PST Fans connected to the same connector.
 */
 
-#include <PID_v1.h>
-#include <DHT.h>
-#include <LedControl.h>
+#include <PID_v1.h>       // https://github.com/br3ttb/Arduino-PID-Library
+#include <DHT.h>          // https://github.com/markruys/arduino-DHT
+#include <LedControl.h>   // https://github.com/wayoda/LedControl
 #include <EEPROM.h>
 
 // Change this if you want your current settings to be overwritten.
