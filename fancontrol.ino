@@ -4,9 +4,7 @@
  * Copyright (C) 2017 Matteo Bonora (bonora.matteo@gmail.com) - All Rights Reserved
  *
  * fancontrol is available under the GNU LGPLv3 License which is available at <http://www.gnu.org/licenses/lgpl.html>
-*/
 
-/*
   This is a temperature-based fan controller using PID logic and PWM signals to control PC fans.
 
   Check out my instructable on this project for more info
@@ -53,7 +51,7 @@
 #define TARGET_UP 18    // Up/Down buttons pins
 #define TARGET_DOWN 19
 
-#define DBG true
+#define DBG false
 // Debug macro to print messages to serial
 #define DEBUG(x)  if(DBG && Serial) { Serial.print (x); }
 
@@ -77,11 +75,13 @@ int ticks = 0, speed = 0;
 unsigned long prev1, prev2, prev3 = 0; // Time placeholders
 
 double duty;
-// Display temp, .5 rounded and Compute temp, integer (double for PID library);
+// Display temp, .5 rounded and Compute temp, integer (declared as double because of PID library input);
 double dtemp, ctemp;
 
+// Fan status
 bool fanRunning = true;
 
+// Settings
 struct StoreStruct
 {
   // This is for mere detection if they are your settings
@@ -93,6 +93,7 @@ struct StoreStruct
   40
 };
 
+// Initialize all the libraries. parameters for PID are harcoded.
 PID fanPID(&ctemp, &duty, &storage.target, 1, 0.5, 0.05, REVERSE);
 LedControl lc = LedControl(SEG_DIN, SEG_CLK, SEG_CS, 1);
 DHT sensor;
@@ -125,18 +126,20 @@ void pwmSet6(int value)
   TCCR4C |= 0x09; // Activate channel D
 }
 
-//  Called when hall sensor pulses
+/* Called when hall sensor pulses */
 void pickRPM ()
 {
   volatile unsigned long currentMicros = micros();
 
-  if (currentMicros - previousMicros > 20000) {   // Prevent pulses less than 20k micros far.
+  if (currentMicros - previousMicros > 20000) // Prevent pulses less than 20k micros far.
+  {
     duration += currentMicros - previousMicros;
     previousMicros = currentMicros;
     ticks++;
   }
 }
 
+/* Settings management on the EEPROM */
 void loadConfig()
 {
   // Check if saved bytes have the same "version" and loads them. Otherwise it will load the default values.
@@ -153,6 +156,9 @@ void saveConfig()
     EEPROM.update(CONFIG_START + t, *((char*)&storage + t));
 }
 
+/* LCD MANAGEMENT FUNCTIONS */
+
+/* Writes 'str' to the lcd, starting at 'index' */
 void writeSeg(char str[], byte index)
 {
   int size = strlen(str);
@@ -163,15 +169,17 @@ void writeSeg(char str[], byte index)
   }
 }
 
+/* writes the temperature on the lcd. 'off' defines the offset and dInt defines whether the temp is an int or a float */
 void writeTemp(float temp, byte off, bool dInt = false)
 {
   byte t[3];
 
-  if (!dInt)
+  if (!dInt) // If it's a float, then multiply by 10 to get rid of the decimal value
   {
     temp *= 10;
   }
 
+  // Split the value in an array of bytes
   t[0] = (int)temp % 10;
   temp /= 10;
 
@@ -183,7 +191,7 @@ void writeTemp(float temp, byte off, bool dInt = false)
     t[2] = (int)temp % 10;
   }
 
-
+  // Do the actual printing
   for (byte i = 1; i < 4; i++)
   {
     lc.setDigit(0, i + off, t[i - 1], (i == 2 && !dInt));
@@ -191,6 +199,7 @@ void writeTemp(float temp, byte off, bool dInt = false)
   lc.setChar(0, off, 'C', false);
 }
 
+/* Calls the right functions to fill the left half of the lcd */
 void writeLeft()
 {
   if (targetMode)
@@ -203,6 +212,7 @@ void writeLeft()
   }
 }
 
+/* Calls the right functions to fill the right half of the lcd */
 void writeRight()
 {
   if (targetMode)
@@ -224,15 +234,24 @@ void writeRight()
   }
 }
 
-// Routine that updates the display
+/* Routine that updates the display */
 void printSeg()
 {
   writeRight();
   writeLeft();
 }
 
+
 void setup()
 {
+  Serial.begin(19200);
+  if (DBG)
+  {
+    while (!Serial) {}    /*   WAIT FOR THE SERIAL CONNECTION FOR DEBUGGING   */
+  }
+
+  DEBUG("Fans...");
+
   pinMode(SPD_IN, INPUT);
   pinMode(RELAY, OUTPUT);
   pinMode(TARGET_UP, INPUT_PULLUP);
@@ -240,27 +259,31 @@ void setup()
 
   attachInterrupt(digitalPinToInterrupt(SPD_IN), pickRPM, FALLING);
 
+  DEBUG("Display...");
   lc.clearDisplay(0);
   lc.shutdown(0, false);
   lc.setIntensity(0, 15);
 
   writeSeg("Fan Ctrl", 0);
 
-  // Configure Timer 4 (Pin 6)
   pwm6configure();
 
   loadConfig();
 
+  DEBUG("PID...");
+  // Setup the PID to work with our settings
   fanPID.SetSampleTime(WAIT);
   fanPID.SetOutputLimits(DUTY_MIN - DUTY_DEAD_ZONE, 255);
   fanPID.SetMode(AUTOMATIC);
 
-  Serial.begin(19200);
-  //while (!Serial) {}    /*   WARNING: FOR DEBUG ONLY   */
   DEBUG("Fans...");
   pwmSet6(255);
+  // Let the fan run for 5s. Here we could add a fan health control to see if the fan revs to a certain value.
   delay(5000);
+
+  DEBUG("Sensor...");
   sensor.setup(TEMP_IN);
+
   DEBUG("Ready.\n\n");
   lc.clearDisplay(0);
 
@@ -283,19 +306,25 @@ void loop()
     {
       prev3 = cur;
       double t = sensor.getTemperature();
+
+      /* Sometimes I get a checksum error from my DHT-22.
+         To avoid exceptions I check if the reported temp is a number.
+         This should work only with the "getStatus() == 0" above, but it gave me errors anyway, So I doublecheck */
       if (!isnan(t))
       {
         dtemp = round(t * 2.0) / 2.0;
         ctemp = round(t);
       }
-    } else
+    }
+    else
     {
+      // If there's an error in the sensor, wait 5 seconds to let the communication reset
       prev3 += 5000;
       sensor.setup(TEMP_IN);
     }
   }
 
-  fanPID.Compute();
+  fanPID.Compute(); // Do magic
 
   if (cur - prev1 >= WAIT)
   {
@@ -304,10 +333,12 @@ void loop()
     unsigned long _ticks = ticks;
     duration = 0;
 
+    // Calculate fan speed
     float Freq = (1e6 / float(_duration) * _ticks) / 2;
     speed = Freq * 60;
     ticks = 0;
 
+    // Turn the fans ON/OFF
     if (round(duty) < DUTY_MIN)
     {
       digitalWrite(RELAY, HIGH);
@@ -321,7 +352,7 @@ void loop()
       digitalWrite(RELAY, LOW);
     }
 
-    shouldPrint = true;
+    shouldPrint = true; // Things have changed. remind to update the display
 
     DEBUG(sensor.getStatusString());
     DEBUG(" - Target: ");
@@ -333,9 +364,7 @@ void loop()
     DEBUG("\n");
   }
 
-  /*
-    Checks if the +/- buttons are pressed and if it's not the first time they've been pressed.
-  */
+  /* Checks if the +/- buttons are pressed and if it's not the first time they've been pressed. */
   if (up && !lastUp == up && targetMode && storage.target < 255)
   {
     storage.target++;
@@ -346,9 +375,7 @@ void loop()
     storage.target--;
   }
 
-  /*
-     If either + or - buttons are pressed, enter target mode and display the current target on screen.
-  */
+  /* If either + or - buttons are pressed, enter target mode and display the current target on the lcd. */
   if (up || down)
   {
     targetMode = true;
@@ -356,18 +383,15 @@ void loop()
     prev2 = cur;
   }
 
-  /*
-    If 3 secs have elapsed and no button is pressed, exit target mode.
-  */
+  /* If 3 secs have elapsed and no button has been pressed, exit target mode. */
   if (targetMode && cur - prev2 >= 3000)
   {
     targetMode = false;
     shouldPrint = true;
 
-    saveConfig();
+    saveConfig();   // Save the config only when exiting targetMode to reduce EEPROM wear
   }
 
   if (shouldPrint)
     printSeg();
 }
-
