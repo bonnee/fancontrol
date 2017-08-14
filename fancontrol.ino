@@ -61,6 +61,10 @@
 #define DUTY_MIN 64        // The minimum fans speed (0...255)
 #define DUTY_DEAD_ZONE 64  // The delta between the minimum output for the PID and DUTY_MIN (DUTY_MIN - DUTY_DEAD_ZONE).
 
+#define KP 0.4 
+#define KI 0.4
+#define KD 0.05
+
 /* Target set vars */
 bool targetMode = false;
 bool lastUp = false, lastDown = false;
@@ -93,8 +97,8 @@ struct StoreStruct
   40
 };
 
-// Initialize all the libraries. parameters for PID are harcoded.
-PID fanPID(&ctemp, &duty, &storage.target, 1, 0.5, 0.05, REVERSE);
+// Initialize all the libraries.
+PID fanPID(&ctemp, &duty, &storage.target, KP, KI, KD, REVERSE);
 LedControl lc = LedControl(SEG_DIN, SEG_CLK, SEG_CS, 1);
 DHT sensor;
 
@@ -159,7 +163,7 @@ void saveConfig()
 /* LCD MANAGEMENT FUNCTIONS */
 
 /* Writes 'str' to the lcd, starting at 'index' */
-void writeSeg(char str[], byte index)
+void writeSeg(const char str[], byte index)
 {
   int size = strlen(str);
 
