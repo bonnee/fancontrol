@@ -61,7 +61,7 @@
 #define DUTY_MIN 64        // The minimum fans speed (0...255)
 #define DUTY_DEAD_ZONE 64  // The delta between the minimum output for the PID and DUTY_MIN (DUTY_MIN - DUTY_DEAD_ZONE).
 
-#define KP 0.4 
+#define KP 0.4
 #define KI 0.4
 #define KD 0.05
 
