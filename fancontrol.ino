@@ -25,6 +25,7 @@
 #include <DHT.h>          // https://github.com/markruys/arduino-DHT
 #include <LedControl.h>   // https://github.com/wayoda/LedControl
 #include <EEPROM.h>
+#include "sched.h"
 
 // Change this if you want your current settings to be overwritten.
 #define CONFIG_VERSION "f01"
@@ -85,6 +86,8 @@ double dtemp, ctemp;
 // Fan status
 bool fanRunning = true;
 
+bool shouldPrint = false;
+
 // Settings
 struct StoreStruct
 {
@@ -98,6 +101,7 @@ struct StoreStruct
 };
 
 // Initialize all the libraries.
+LittleScheduler sched;
 PID fanPID(&ctemp, &duty, &storage.target, KP, KI, KD, REVERSE);
 LedControl lc = LedControl(SEG_DIN, SEG_CLK, SEG_CS, 1);
 DHT sensor;
@@ -245,6 +249,68 @@ void printSeg()
   writeLeft();
 }
 
+void updateTemp()
+{
+  if (sensor.getStatus() == 0)
+    {
+      double t = sensor.getTemperature();
+
+      /* Sometimes I get a checksum error from my DHT-22.
+         To avoid exceptions I check if the reported temp is a number.
+         This should work only with the "getStatus() == 0" above, but it gave me errors anyway, So I doublecheck */
+      if (!isnan(t))
+      {
+        dtemp = round(t * 2.0) / 2.0;
+        ctemp = round(t);
+      }
+    }
+    else
+    {
+      // If there's an error in the sensor, wait 5 seconds to let the communication reset
+      // !!! Not anymore.
+      prev3 += 5000;
+      // !!!
+      sensor.setup(TEMP_IN);
+    }
+}
+
+void updateRPM()
+{
+  //prev1 = cur;
+    unsigned long _duration = duration;
+    unsigned long _ticks = ticks;
+    duration = 0;
+
+    // Calculate fan speed
+    float Freq = (1e6 / float(_duration) * _ticks) / 2;
+    speed = Freq * 60;
+    ticks = 0;
+
+    // Turn the fans ON/OFF
+    if (round(duty) < DUTY_MIN)
+    {
+      digitalWrite(RELAY, HIGH);
+      PWM6 = 0;
+      fanRunning = false;
+    }
+    else
+    {
+      fanRunning = true;
+      PWM6 = duty;
+      digitalWrite(RELAY, LOW);
+    }
+
+    shouldPrint = true; // Things have changed. remind to update the display
+
+    DEBUG(sensor.getStatusString());
+    DEBUG(" - Target: ");
+    DEBUG(storage.target);
+    DEBUG(" - Temp: ");
+    DEBUG(ctemp);
+    DEBUG(" - Duty: ");
+    DEBUG(map(round(duty), 0, 255, 0, 100));
+    DEBUG("\n");
+}
 
 void setup()
 {
@@ -289,6 +355,10 @@ void setup()
   sensor.setup(TEMP_IN);
 
   DEBUG("Ready.\n\n");
+
+  sched.add_task(updateTemp, 5000, 15, NULL);
+  sched.add_task(updateRPM, 500, 10, NULL);
+  
   lc.clearDisplay(0);
 
   prev1 = millis();
@@ -297,7 +367,6 @@ void setup()
 void loop()
 {
   unsigned long cur = millis();
-  bool shouldPrint = false;
 
   lastUp = up;
   lastDown = down;
@@ -306,66 +375,14 @@ void loop()
 
   if (cur - prev3 >= sensor.getMinimumSamplingPeriod())
   {
-    if (sensor.getStatus() == 0)
-    {
-      prev3 = cur;
-      double t = sensor.getTemperature();
-
-      /* Sometimes I get a checksum error from my DHT-22.
-         To avoid exceptions I check if the reported temp is a number.
-         This should work only with the "getStatus() == 0" above, but it gave me errors anyway, So I doublecheck */
-      if (!isnan(t))
-      {
-        dtemp = round(t * 2.0) / 2.0;
-        ctemp = round(t);
-      }
-    }
-    else
-    {
-      // If there's an error in the sensor, wait 5 seconds to let the communication reset
-      prev3 += 5000;
-      sensor.setup(TEMP_IN);
-    }
+    // Moved to updateTemp.
   }
 
   fanPID.Compute(); // Do magic
 
   if (cur - prev1 >= WAIT)
   {
-    prev1 = cur;
-    unsigned long _duration = duration;
-    unsigned long _ticks = ticks;
-    duration = 0;
-
-    // Calculate fan speed
-    float Freq = (1e6 / float(_duration) * _ticks) / 2;
-    speed = Freq * 60;
-    ticks = 0;
-
-    // Turn the fans ON/OFF
-    if (round(duty) < DUTY_MIN)
-    {
-      digitalWrite(RELAY, HIGH);
-      PWM6 = 0;
-      fanRunning = false;
-    }
-    else
-    {
-      fanRunning = true;
-      PWM6 = duty;
-      digitalWrite(RELAY, LOW);
-    }
-
-    shouldPrint = true; // Things have changed. remind to update the display
-
-    DEBUG(sensor.getStatusString());
-    DEBUG(" - Target: ");
-    DEBUG(storage.target);
-    DEBUG(" - Temp: ");
-    DEBUG(ctemp);
-    DEBUG(" - Duty: ");
-    DEBUG(map(round(duty), 0, 255, 0, 100));
-    DEBUG("\n");
+    // updateRPM
   }
 
   /* Checks if the +/- buttons are pressed and if it's not the first time they've been pressed. */
