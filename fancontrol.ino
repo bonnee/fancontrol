@@ -2,6 +2,7 @@
  *
  * fancontrol is free software.
  * Copyright (C) 2017 Matteo Bonora (bonora.matteo@gmail.com) - All Rights Reserved
+ * Copyright (C) 2017 Maxim (massigi@live.it) for LittleScheduler - All Rights Reserved
  *
  * fancontrol is released under the GNU LGPLv3 License which is available at <http://www.gnu.org/licenses/lgpl.html>
 
