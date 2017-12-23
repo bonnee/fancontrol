@@ -3,7 +3,7 @@
  * fancontrol is free software.
  * Copyright (C) 2017 Matteo Bonora (bonora.matteo@gmail.com) - All Rights Reserved
  *
- * fancontrol is available under the GNU LGPLv3 License which is available at <http://www.gnu.org/licenses/lgpl.html>
+ * fancontrol is released under the GNU LGPLv3 License which is available at <http://www.gnu.org/licenses/lgpl.html>
 
   This is a temperature-based fan controller using PID logic and PWM signals to control PC fans.
 
