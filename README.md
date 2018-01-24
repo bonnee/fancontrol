@@ -8,5 +8,5 @@ This is a temperature-based fan controller using PID logic and PWM signals to co
 External libraries:
  * [PID](https://github.com/br3ttb/Arduino-PID-Library)
  * [DHT](https://github.com/markruys/arduino-DHT)
- * [LedControl](https://github.com/wayoda/LedControl) (With [#13](https://github.com/wayoda/LedControl/pull/13))
+ * [LedControl](https://github.com/giech/LedControl)
  * [LittleScheduler](https://github.com/Hook25/SomeRob/blob/master/sched.cpp)
