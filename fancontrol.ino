@@ -24,7 +24,7 @@
 
 #include <PID_v1.h>       // https://github.com/br3ttb/Arduino-PID-Library
 #include <DHT.h>          // https://github.com/markruys/arduino-DHT
-#include <LedControl.h>   // https://github.com/wayoda/LedControl
+#include <LedControl.h>   // https://github.com/giech/LedControl
 #include <EEPROM.h>
 #include "sched.h"
 
@@ -151,7 +151,7 @@ void pickRPM ()
 /* Settings management on the EEPROM */
 void loadConfig()
 {
-  // Check if saved bytes have the same "version" and loads them. Otherwise it will load the default values.
+  // Check if saved settings have the same version number and if true loads them. Otherwise it will load the default values.
   if (EEPROM.read(CONFIG_START + 0) == CONFIG_VERSION[0] &&
       EEPROM.read(CONFIG_START + 1) == CONFIG_VERSION[1] &&
       EEPROM.read(CONFIG_START + 2) == CONFIG_VERSION[2])
@@ -167,7 +167,7 @@ void saveConfig()
 
 /* LCD MANAGEMENT FUNCTIONS */
 
-/* Writes 'str' to the lcd, starting at 'index' */
+/* Writes str[] to the LCD, starting at index and going right */
 void writeSeg(const char str[], byte index)
 {
   int size = strlen(str);
@@ -178,7 +178,7 @@ void writeSeg(const char str[], byte index)
   }
 }
 
-/* writes the temperature on the lcd. 'off' defines the offset and dInt defines whether the temp is an int or a float */
+/* writes the temperature on the LCD. 'off' defines the offset and dInt defines whether the temp is an int or a float */
 void writeTemp(float temp, byte off, bool dInt = false)
 {
   byte t[3];
@@ -208,7 +208,7 @@ void writeTemp(float temp, byte off, bool dInt = false)
   lc.setChar(0, off, 'C', false);
 }
 
-/* Calls the right functions to fill the left half of the lcd */
+/* Fills the left half of the lcd */
 void writeLeft()
 {
   if (targetMode)
@@ -221,7 +221,7 @@ void writeLeft()
   }
 }
 
-/* Calls the right functions to fill the right half of the lcd */
+/* Fills the right half of the lcd */
 void writeRight()
 {
   if (targetMode)
@@ -268,11 +268,13 @@ void updateTemp()
     else
     {
       // If there's an error in the sensor, wait 5 seconds to let the communication reset
-      // !!! Not anymore.
+      // !!! Not working with sched.
       prev3 += 5000;
       // !!!
       sensor.setup(TEMP_IN);
     }
+
+  fanPID.Compute();
 }
 
 void updateRPM()
@@ -303,14 +305,41 @@ void updateRPM()
 
     shouldPrint = true; // Things have changed. remind to update the display
 
-    DEBUG(sensor.getStatusString());
+    /*DEBUG(sensor.getStatusString());
     DEBUG(" - Target: ");
     DEBUG(storage.target);
     DEBUG(" - Temp: ");
     DEBUG(ctemp);
     DEBUG(" - Duty: ");
     DEBUG(map(round(duty), 0, 255, 0, 100));
-    DEBUG("\n");
+    DEBUG("\n");*/
+}
+
+void serialCmd()
+{
+  if(Serial && Serial.available() > 0)
+  {
+    char cmd;
+    cmd=Serial.read();
+    switch(cmd)
+    {
+      case 't': // Target temp
+	Serial.print(storage.target+'\n');
+	break;
+      case 'a': // Air temp
+	Serial.print(ctemp+'\n');
+	break;
+      case 'f': // Fan %
+	Serial.print(map(round(duty), 0, 255, 0, 100)+'\n');
+	break;
+      case 'r': // Fan RPM
+	Serial.print(speed+'\n');
+	break;
+      default:
+	Serial.print('unknown\n');
+	break;
+    }
+  }
 }
 
 void setup()
@@ -356,10 +385,12 @@ void setup()
   sensor.setup(TEMP_IN);
 
   DEBUG("Ready.\n\n");
-
+  
+  //		 FUNC,     PRED T, EST T, ARGS
   sched.add_task(updateTemp, 5000, 15, NULL);
   sched.add_task(updateRPM, 500, 10, NULL);
-  
+  sched.add_task(serialCmd, 500, 10, NULL);
+
   lc.clearDisplay(0);
 
   prev1 = millis();
@@ -376,14 +407,14 @@ void loop()
 
   if (cur - prev3 >= sensor.getMinimumSamplingPeriod())
   {
-    // Moved to updateTemp.
+    // Moved to updateTemp
   }
 
-  fanPID.Compute(); // Do magic
-
+  //fanPID.Compute(); // Moved into updateTemp to execute in sync
+  
   if (cur - prev1 >= WAIT)
   {
-    // updateRPM
+    // Moved to updateRPM
   }
 
   /* Checks if the +/- buttons are pressed and if it's not the first time they've been pressed. */
