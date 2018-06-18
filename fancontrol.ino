@@ -21,45 +21,45 @@
   This code has been tested on a SparkFun Pro Micro 16MHz Clone with 4 Arctic F12 PWM PST Fans connected to the same connector.
 */
 
-#include <PID_v1.h>       // https://github.com/br3ttb/Arduino-PID-Library
-#include <DHT.h>          // https://github.com/markruys/arduino-DHT
-#include <LedControl.h>   // https://github.com/wayoda/LedControl
-#include <EEPROM.h>
-
-// Change this if you want your current settings to be overwritten.
-#define CONFIG_VERSION "f01"
-// Where to store config data in EEPROM
-#define CONFIG_START 32
+#include <PID_v1.h>     // https://github.com/br3ttb/Arduino-PID-Library
+#include <LedControl.h> // https://github.com/wayoda/LedControl
+#include "config.h"
+#include "temp.h"
+#include "button.h"
 
 // Pin 6 shortcut
-#define PWM6        OCR4D
+#define PWM6 OCR4D
 
 // Terminal count
 #define PWM6_MAX OCR4C
 
 /*        Pinouts       */
-#define SPD_IN 7        // RPM input pin
+#define SPD_IN 7 // RPM input pin
 
 // 7-segment display
 #define SEG_DIN 16
 #define SEG_CLK 14
 #define SEG_CS 15
 
-#define RELAY 9         // Relay output pin
+#define RELAY 9 // Relay output pin
 
-#define TEMP_IN 4       // Temperature sensor input pin
-#define TARGET_UP 18    // Up/Down buttons pins
+#define TEMP_IN 4    // Temperature sensor input pin
+#define TARGET_UP 18 // Up/Down buttons pins
 #define TARGET_DOWN 19
 
 #define DBG false
 // Debug macro to print messages to serial
-#define DEBUG(x)  if(DBG && Serial) { Serial.print (x); }
+#define DEBUG(x)     \
+  if (DBG && Serial) \
+  {                  \
+    Serial.print(x); \
+  }
 
 // Tells the amount of time (in ms) to wait between updates
 #define WAIT 500
 
-#define DUTY_MIN 64        // The minimum fans speed (0...255)
-#define DUTY_DEAD_ZONE 64  // The delta between the minimum output for the PID and DUTY_MIN (DUTY_MIN - DUTY_DEAD_ZONE).
+#define DUTY_MIN 64       // The minimum fans speed (0...255)
+#define DUTY_DEAD_ZONE 64 // The delta between the minimum output for the PID and DUTY_MIN (DUTY_MIN - DUTY_DEAD_ZONE).
 
 #define KP 0.4
 #define KI 0.4
@@ -67,7 +67,6 @@
 
 /* Target set vars */
 bool targetMode = false;
-bool lastUp = false, lastDown = false;
 bool up, down = false;
 
 /* RPM calculation */
@@ -80,27 +79,18 @@ unsigned long prev1, prev2, prev3 = 0; // Time placeholders
 
 double duty;
 // Display temp, .5 rounded and Compute temp, integer (declared as double because of PID library input);
-double dtemp, ctemp;
+double display_temp, compute_temp;
 
 // Fan status
 bool fanRunning = true;
 
-// Settings
-struct StoreStruct
-{
-  // This is for mere detection if they are your settings
-  char version[4];
-  // The variables of your settings
-  double target;
-} storage = { // Default values
-  CONFIG_VERSION,
-  40
-};
-
 // Initialize all the libraries.
-PID fanPID(&ctemp, &duty, &storage.target, KP, KI, KD, REVERSE);
+PID fanPID(&compute_temp, &duty, &storage.target, KP, KI, KD, REVERSE);
 LedControl lc = LedControl(SEG_DIN, SEG_CLK, SEG_CS, 1);
-DHT sensor;
+Temp sensor = Temp(TEMP_IN);
+
+Button up_btn = Button(TARGET_UP);
+Button down_btn = Button(TARGET_DOWN);
 
 /* Configure the PWM clock */
 void pwm6configure()
@@ -131,7 +121,7 @@ void pwmSet6(int value)
 }
 
 /* Called when hall sensor pulses */
-void pickRPM ()
+void pickRPM()
 {
   volatile unsigned long currentMicros = micros();
 
@@ -146,18 +136,10 @@ void pickRPM ()
 /* Settings management on the EEPROM */
 void loadConfig()
 {
-  // Check if saved bytes have the same "version" and loads them. Otherwise it will load the default values.
-  if (EEPROM.read(CONFIG_START + 0) == CONFIG_VERSION[0] &&
-      EEPROM.read(CONFIG_START + 1) == CONFIG_VERSION[1] &&
-      EEPROM.read(CONFIG_START + 2) == CONFIG_VERSION[2])
-    for (unsigned int t = 0; t < sizeof(storage); t++)
-      *((char*)&storage + t) = EEPROM.read(CONFIG_START + t);
 }
 
 void saveConfig()
 {
-  for (unsigned int t = 0; t < sizeof(storage); t++)
-    EEPROM.update(CONFIG_START + t, *((char*)&storage + t));
 }
 
 /* LCD MANAGEMENT FUNCTIONS */
@@ -212,7 +194,7 @@ void writeLeft()
   }
   else
   {
-    writeTemp(dtemp, 4);
+    writeTemp(display_temp, 4);
   }
 }
 
@@ -245,16 +227,20 @@ void printSeg()
   writeLeft();
 }
 
-
 void setup()
 {
   Serial.begin(19200);
   if (DBG)
   {
-    while (!Serial) {}    /*   WAIT FOR THE SERIAL CONNECTION FOR DEBUGGING   */
+    while (!Serial)
+    {
+    } /*   WAIT FOR THE SERIAL CONNECTION FOR DEBUGGING   */
   }
 
   DEBUG("Fans...");
+
+  up_btn.setup();
+  down_btn.setup();
 
   pinMode(SPD_IN, INPUT);
   pinMode(RELAY, OUTPUT);
@@ -286,7 +272,7 @@ void setup()
   delay(5000);
 
   DEBUG("Sensor...");
-  sensor.setup(TEMP_IN);
+  sensor.setup();
 
   DEBUG("Ready.\n\n");
   lc.clearDisplay(0);
@@ -296,43 +282,22 @@ void setup()
 
 void loop()
 {
-  unsigned long cur = millis();
+  unsigned long now = millis();
   bool shouldPrint = false;
 
-  lastUp = up;
-  lastDown = down;
-  up = !digitalRead(TARGET_UP);
-  down = !digitalRead(TARGET_DOWN);
-
-  if (cur - prev3 >= sensor.getMinimumSamplingPeriod())
+  // Update the temperature
+  int temp = sensor.loop(now);
+  if (temp > 0)
   {
-    if (sensor.getStatus() == 0)
-    {
-      prev3 = cur;
-      double t = sensor.getTemperature();
-
-      /* Sometimes I get a checksum error from my DHT-22.
-         To avoid exceptions I check if the reported temp is a number.
-         This should work only with the "getStatus() == 0" above, but it gave me errors anyway, So I doublecheck */
-      if (!isnan(t))
-      {
-        dtemp = round(t * 2.0) / 2.0;
-        ctemp = round(t);
-      }
-    }
-    else
-    {
-      // If there's an error in the sensor, wait 5 seconds to let the communication reset
-      prev3 += 5000;
-      sensor.setup(TEMP_IN);
-    }
+    display_temp = round(temp * 2.0) / 2.0;
+    compute_temp = round(temp);
   }
 
   fanPID.Compute(); // Do magic
 
-  if (cur - prev1 >= WAIT)
+  if (now - prev1 >= WAIT)
   {
-    prev1 = cur;
+    prev1 = now;
     unsigned long _duration = duration;
     unsigned long _ticks = ticks;
     duration = 0;
@@ -358,42 +323,36 @@ void loop()
 
     shouldPrint = true; // Things have changed. remind to update the display
 
-    DEBUG(sensor.getStatusString());
+    //DEBUG(sensor.getStatusString());
     DEBUG(" - Target: ");
     DEBUG(storage.target);
     DEBUG(" - Temp: ");
-    DEBUG(ctemp);
+    DEBUG(compute_temp);
     DEBUG(" - Duty: ");
     DEBUG(map(round(duty), 0, 255, 0, 100));
     DEBUG("\n");
   }
 
-  /* Checks if the +/- buttons are pressed and if it's not the first time they've been pressed. */
-  if (up && !lastUp == up && targetMode && storage.target < 255)
-  {
+  if (up_btn.loop())
     storage.target++;
-  }
-
-  if (down && !lastDown == down && targetMode && storage.target > 0)
-  {
+  if (down_btn.loop())
     storage.target--;
-  }
 
   /* If either + or - buttons are pressed, enter target mode and display the current target on the lcd. */
   if (up || down)
   {
     targetMode = true;
     shouldPrint = true;
-    prev2 = cur;
+    prev2 = now;
   }
 
   /* If 3 secs have elapsed and no button has been pressed, exit target mode. */
-  if (targetMode && cur - prev2 >= 3000)
+  if (targetMode && now - prev2 >= 3000)
   {
     targetMode = false;
     shouldPrint = true;
 
-    saveConfig();   // Save the config only when exiting targetMode to reduce EEPROM wear
+    saveConfig(); // Save the config only when exiting targetMode to reduce EEPROM wear
   }
 
   if (shouldPrint)
