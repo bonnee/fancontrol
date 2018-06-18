@@ -85,6 +85,7 @@ double display_temp, compute_temp;
 bool fanRunning = true;
 
 // Initialize all the libraries.
+Config cfg;
 PID fanPID(&compute_temp, &duty, &storage.target, KP, KI, KD, REVERSE);
 LedControl lc = LedControl(SEG_DIN, SEG_CLK, SEG_CS, 1);
 Temp sensor = Temp(TEMP_IN);
@@ -203,7 +204,7 @@ void writeRight()
 {
   if (targetMode)
   {
-    writeTemp(storage.target, 0, true);
+    writeTemp(cfg.getTarget(), 0, true);
   }
   else
   {
@@ -258,7 +259,7 @@ void setup()
 
   pwm6configure();
 
-  loadConfig();
+  cfg.setup();
 
   DEBUG("PID...");
   // Setup the PID to work with our settings
@@ -325,7 +326,7 @@ void loop()
 
     //DEBUG(sensor.getStatusString());
     DEBUG(" - Target: ");
-    DEBUG(storage.target);
+    DEBUG(cfg.getTarget());
     DEBUG(" - Temp: ");
     DEBUG(compute_temp);
     DEBUG(" - Duty: ");
@@ -334,9 +335,9 @@ void loop()
   }
 
   if (up_btn.loop())
-    storage.target++;
+    cfg.setTarget(cfg.getTarget() + 1);
   if (down_btn.loop())
-    storage.target--;
+    cfg.setTarget(cfg.getTarget() - 1);
 
   /* If either + or - buttons are pressed, enter target mode and display the current target on the lcd. */
   if (up || down)
@@ -352,7 +353,7 @@ void loop()
     targetMode = false;
     shouldPrint = true;
 
-    saveConfig(); // Save the config only when exiting targetMode to reduce EEPROM wear
+    cfg.write(); // Save the config only when exiting targetMode to reduce EEPROM wear
   }
 
   if (shouldPrint)
