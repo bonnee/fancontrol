@@ -16,11 +16,6 @@ void Config::write()
 		EEPROM.update(CONFIG_START + t, *((char *)&storage + t));
 }
 
-double Config::getTarget()
-{
-	return storage.target;
-}
-
 void Config::setTarget(double new_target)
 {
 	storage.target = new_target;

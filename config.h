@@ -11,15 +11,21 @@ struct StoreStruct
 {
 	char version[4];
 	double target;
-} storage = { // Default values
-	CONFIG_VERSION,
-	40};
+};
 
 class Config
 {
+	StoreStruct storage = {
+		CONFIG_VERSION,
+		40};
+
   public:
-	Config();
-	double getTarget();
+	// Shady hack that exposes target as a read-only variable.
+	// Needed to pass target as reference in PID declaration.
+	const double &target;
+
+	Config() : target(storage.target) {}
+
 	void setTarget(double new_target);
 	void setup();
 	void write();

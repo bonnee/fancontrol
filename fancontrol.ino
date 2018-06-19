@@ -85,8 +85,8 @@ double display_temp, compute_temp;
 bool fanRunning = true;
 
 // Initialize all the libraries.
-Config cfg;
-PID fanPID(&compute_temp, &duty, &storage.target, KP, KI, KD, REVERSE);
+Config cfg = Config();
+PID fanPID(&compute_temp, &duty, &cfg.target, KP, KI, KD, REVERSE);
 LedControl lc = LedControl(SEG_DIN, SEG_CLK, SEG_CS, 1);
 Temp sensor = Temp(TEMP_IN);
 
@@ -132,15 +132,6 @@ void pickRPM()
     previousMicros = currentMicros;
     ticks++;
   }
-}
-
-/* Settings management on the EEPROM */
-void loadConfig()
-{
-}
-
-void saveConfig()
-{
 }
 
 /* LCD MANAGEMENT FUNCTIONS */
@@ -204,7 +195,7 @@ void writeRight()
 {
   if (targetMode)
   {
-    writeTemp(cfg.getTarget(), 0, true);
+    writeTemp(cfg.target, 0, true);
   }
   else
   {
@@ -326,7 +317,7 @@ void loop()
 
     //DEBUG(sensor.getStatusString());
     DEBUG(" - Target: ");
-    DEBUG(cfg.getTarget());
+    DEBUG(cfg.target);
     DEBUG(" - Temp: ");
     DEBUG(compute_temp);
     DEBUG(" - Duty: ");
@@ -335,9 +326,9 @@ void loop()
   }
 
   if (up_btn.loop())
-    cfg.setTarget(cfg.getTarget() + 1);
+    cfg.setTarget(cfg.target + 1);
   if (down_btn.loop())
-    cfg.setTarget(cfg.getTarget() - 1);
+    cfg.setTarget(cfg.target - 1);
 
   /* If either + or - buttons are pressed, enter target mode and display the current target on the lcd. */
   if (up || down)
