@@ -25,13 +25,8 @@
 #include <LedControl.h> // https://github.com/wayoda/LedControl
 #include "config.h"
 #include "temp.h"
+#include "fan.h"
 #include "button.h"
-
-// Pin 6 shortcut
-#define PWM6 OCR4D
-
-// Terminal count
-#define PWM6_MAX OCR4C
 
 /*        Pinouts       */
 #define SPD_IN 7 // RPM input pin
@@ -58,9 +53,6 @@
 // Tells the amount of time (in ms) to wait between updates
 #define WAIT 500
 
-#define DUTY_MIN 64       // The minimum fans speed (0...255)
-#define DUTY_DEAD_ZONE 64 // The delta between the minimum output for the PID and DUTY_MIN (DUTY_MIN - DUTY_DEAD_ZONE).
-
 #define KP 0.4
 #define KI 0.4
 #define KD 0.05
@@ -69,70 +61,26 @@
 bool targetMode = false;
 bool up, down = false;
 
-/* RPM calculation */
-volatile unsigned long duration = 0; // accumulates pulse width
-volatile unsigned int pulsecount = 0;
-volatile unsigned long previousMicros = 0;
-int ticks = 0, speed = 0;
-
 unsigned long prev1, prev2, prev3 = 0; // Time placeholders
 
-double duty;
 // Display temp, .5 rounded and Compute temp, integer (declared as double because of PID library input);
 double display_temp, compute_temp;
 
 // Fan status
 bool fanRunning = true;
 
+double duty, target;
+
 // Initialize all the libraries.
 Config cfg = Config();
-PID fanPID(&compute_temp, &duty, &cfg.target, KP, KI, KD, REVERSE);
+PID fanPID(&compute_temp, &duty, &target, KP, KI, KD, REVERSE);
 LedControl lc = LedControl(SEG_DIN, SEG_CLK, SEG_CS, 1);
 Temp sensor = Temp(TEMP_IN);
 
 Button up_btn = Button(TARGET_UP);
 Button down_btn = Button(TARGET_DOWN);
 
-/* Configure the PWM clock */
-void pwm6configure()
-{
-  // TCCR4B configuration
-  TCCR4B = 4; /* 4 sets 23437Hz */
-
-  // TCCR4C configuration
-  TCCR4C = 0;
-
-  // TCCR4D configuration
-  TCCR4D = 0;
-
-  // PLL Configuration
-  PLLFRQ = (PLLFRQ & 0xCF) | 0x30;
-
-  // Terminal count for Timer 4 PWM
-  OCR4C = 255;
-}
-
-// Set PWM to D6 (Timer4 D)
-// Argument is PWM between 0 and 255
-void pwmSet6(int value)
-{
-  OCR4D = value;  // Set PWM value
-  DDRD |= 1 << 7; // Set Output Mode D7
-  TCCR4C |= 0x09; // Activate channel D
-}
-
-/* Called when hall sensor pulses */
-void pickRPM()
-{
-  volatile unsigned long currentMicros = micros();
-
-  if (currentMicros - previousMicros > 20000) // Prevent pulses less than 20k micros far.
-  {
-    duration += currentMicros - previousMicros;
-    previousMicros = currentMicros;
-    ticks++;
-  }
-}
+Fan fan = Fan(RELAY, SPD_IN);
 
 /* LCD MANAGEMENT FUNCTIONS */
 
@@ -195,7 +143,7 @@ void writeRight()
 {
   if (targetMode)
   {
-    writeTemp(cfg.target, 0, true);
+    writeTemp(cfg.getTarget(), 0, true);
   }
   else
   {
@@ -219,6 +167,11 @@ void printSeg()
   writeLeft();
 }
 
+void step()
+{
+  fan.step();
+}
+
 void setup()
 {
   Serial.begin(19200);
@@ -231,15 +184,18 @@ void setup()
 
   DEBUG("Fans...");
 
+  attachInterrupt(digitalPinToInterrupt(SPD_IN), step, FALLING);
+  fan.setup();
+
+  // Let the fan run for 5s. Here we could add a fan health control to see if the fan revs to a certain value.
+  delay(5000);
+
+  DEBUG("Sensor...");
+  sensor.setup();
+
+  DEBUG("I/O...");
   up_btn.setup();
   down_btn.setup();
-
-  pinMode(SPD_IN, INPUT);
-  pinMode(RELAY, OUTPUT);
-  pinMode(TARGET_UP, INPUT_PULLUP);
-  pinMode(TARGET_DOWN, INPUT_PULLUP);
-
-  attachInterrupt(digitalPinToInterrupt(SPD_IN), pickRPM, FALLING);
 
   DEBUG("Display...");
   lc.clearDisplay(0);
@@ -248,23 +204,13 @@ void setup()
 
   writeSeg("Fan Ctrl", 0);
 
-  pwm6configure();
-
   cfg.setup();
 
-  DEBUG("PID...");
+  DEBUG("Controller...");
   // Setup the PID to work with our settings
   fanPID.SetSampleTime(WAIT);
   fanPID.SetOutputLimits(DUTY_MIN - DUTY_DEAD_ZONE, 255);
   fanPID.SetMode(AUTOMATIC);
-
-  DEBUG("Fans...");
-  pwmSet6(255);
-  // Let the fan run for 5s. Here we could add a fan health control to see if the fan revs to a certain value.
-  delay(5000);
-
-  DEBUG("Sensor...");
-  sensor.setup();
 
   DEBUG("Ready.\n\n");
   lc.clearDisplay(0);
@@ -285,39 +231,17 @@ void loop()
     compute_temp = round(temp);
   }
 
+  target = cfg.getTarget();
   fanPID.Compute(); // Do magic
+  fan.setDuty(duty);
 
   if (now - prev1 >= WAIT)
   {
-    prev1 = now;
-    unsigned long _duration = duration;
-    unsigned long _ticks = ticks;
-    duration = 0;
-
-    // Calculate fan speed
-    float Freq = (1e6 / float(_duration) * _ticks) / 2;
-    speed = Freq * 60;
-    ticks = 0;
-
-    // Turn the fans ON/OFF
-    if (round(duty) < DUTY_MIN)
-    {
-      digitalWrite(RELAY, HIGH);
-      PWM6 = 0;
-      fanRunning = false;
-    }
-    else
-    {
-      fanRunning = true;
-      PWM6 = duty;
-      digitalWrite(RELAY, LOW);
-    }
-
     shouldPrint = true; // Things have changed. remind to update the display
 
     //DEBUG(sensor.getStatusString());
     DEBUG(" - Target: ");
-    DEBUG(cfg.target);
+    DEBUG(cfg.getTarget());
     DEBUG(" - Temp: ");
     DEBUG(compute_temp);
     DEBUG(" - Duty: ");
@@ -326,9 +250,9 @@ void loop()
   }
 
   if (up_btn.loop())
-    cfg.setTarget(cfg.target + 1);
+    cfg.setTarget(target + 1);
   if (down_btn.loop())
-    cfg.setTarget(cfg.target - 1);
+    cfg.setTarget(target - 1);
 
   /* If either + or - buttons are pressed, enter target mode and display the current target on the lcd. */
   if (up || down)
