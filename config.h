@@ -20,13 +20,11 @@ class Config
 		40};
 
   public:
-	// Shady hack that exposes target as a read-only variable.
-	// Needed to pass target as reference in PID declaration.
-	const double &target;
-
-	Config() : target(storage.target) {}
+	Config() {}
 
 	void setTarget(double new_target);
+	double getTarget();
+
 	void setup();
 	void write();
 };

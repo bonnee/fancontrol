@@ -20,3 +20,8 @@ void Config::setTarget(double new_target)
 {
 	storage.target = new_target;
 }
+
+double Config::getTarget()
+{
+	return storage.target;
+}
