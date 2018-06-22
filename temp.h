@@ -4,13 +4,12 @@
 class Temp
 {
 	DHT sensor;
-	int pin;
+	byte pin;
 
 	unsigned long wait_start;
-	bool waiting;
 
   public:
-	Temp(int attachTo);
+	Temp(byte attachTo);
 	void setup();
 	int loop(unsigned long now);
 };
