@@ -6,18 +6,18 @@ void Button::setup()
 	state = HIGH;
 }
 
-bool Button::loop()
+bool Button::get_state()
 {
-	int prevState = state;
+	int prev_state = state;
 	state = digitalRead(pin);
 
-	if (prevState == HIGH && state == LOW)
+	if (prev_state == HIGH && state == LOW)
 	{
-		buttonDownMs = millis();
+		button_down_ms = millis();
 	}
-	else if (prevState == LOW && state == HIGH)
+	else if (prev_state == LOW && state == HIGH)
 	{
-		if (millis() - buttonDownMs < 50)
+		if (millis() - button_down_ms < 50)
 		{
 			// ignore this for debounce
 		}

@@ -22,10 +22,10 @@ class Config
   public:
 	Config() {}
 
-	void setTarget(double new_target);
-	double getTarget();
+	void set_target(double new_target);
+	double get_target();
 
 	void setup();
-	void write();
+	void flush();
 };
 #endif

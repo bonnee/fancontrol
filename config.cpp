@@ -10,18 +10,18 @@ void Config::setup()
 			*((char *)&storage + t) = EEPROM.read(CONFIG_START + t);
 }
 
-void Config::write()
+void Config::flush()
 {
 	for (unsigned int t = 0; t < sizeof(storage); t++)
 		EEPROM.update(CONFIG_START + t, *((char *)&storage + t));
 }
 
-void Config::setTarget(double new_target)
+void Config::set_target(double new_target)
 {
 	storage.target = new_target;
 }
 
-double Config::getTarget()
+double Config::get_target()
 {
 	return storage.target;
 }

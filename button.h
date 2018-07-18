@@ -5,14 +5,12 @@ class Button
 {
 	const byte pin;
 	int state;
-	unsigned long buttonDownMs;
+	unsigned long button_down_ms;
 
-  public:
-	Button(byte attachTo) : pin(attachTo)
-	{
-	}
+public:
+	Button(byte attachTo) : pin(attachTo) {}
 
 	void setup();
-	bool loop();
+	bool get_state();
 };
 #endif
