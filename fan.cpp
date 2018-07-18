@@ -32,6 +32,11 @@ void Speed::calc_speed()
 	ticks = 0;
 }
 
+int Speed::get_speed()
+{
+	return speed;
+}
+
 Fan::Fan(byte relay_pin, byte hall_pin)
 {
 	relay = relay_pin;
@@ -65,29 +70,46 @@ void Fan::step()
 	rpm.step();
 }
 
-bool Fan::isRunning()
+bool Fan::is_running()
 {
 	return running;
 }
 
-void Fan::setDuty(double duty)
+void Fan::update_fan()
 {
-	// Turn the fans ON/OFF
-	if (round(duty) < DUTY_MIN)
-	{
-		digitalWrite(relay, HIGH);
-		PWM6 = 0;
-		running = false;
-	}
-	else
-	{
-		digitalWrite(relay, LOW);
-		PWM6 = duty;
-		running = true;
-	}
+	// Turn the fan ON/OFF
+	running = (duty >= DUTY_MIN);
+	duty *= running;
+
+	digitalWrite(relay, !running); // HIGH = Off
+	PWM6 = duty;
 }
 
-int Fan::getSpeed()
+void Fan::set_percent(byte percent)
 {
-	return rpm.getSpeed();
+	duty = (percent * 255) / 100;
+
+	update_fan();
+}
+
+byte Fan::get_percent()
+{
+	return (duty * 100) / 255;
+}
+
+void Fan::set_duty(byte duty)
+{
+	this->duty = duty;
+
+	update_fan();
+}
+
+byte Fan::get_duty()
+{
+	return duty;
+}
+
+int Fan::get_speed()
+{
+	return rpm.get_speed();
 }

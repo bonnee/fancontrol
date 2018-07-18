@@ -34,7 +34,7 @@ class Speed
 	void step();
 	void loop();
 
-	int getSpeed();
+	int get_speed();
 };
 
 class Fan
@@ -43,6 +43,9 @@ class Fan
 
 	Speed rpm = Speed(0);
 	bool running;
+	byte duty;
+
+	void update_fan();
 
   public:
 	Fan(byte relay_pin, byte hall_pin);
@@ -51,9 +54,14 @@ class Fan
 	void loop();
 
 	void step();
-	bool isRunning();
-	void setDuty(double duty);
+	bool is_running();
 
-	int getSpeed();
+	void set_percent(byte percent);
+	byte get_percent();
+
+	void set_duty(byte duty);
+	byte get_duty();
+
+	int get_speed();
 };
 #endif
