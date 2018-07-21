@@ -8,7 +8,7 @@ void Temp::setup()
 
 bool Temp::loop()
 {
-	if (millis() - wait_start >= sensor.getMinimumSamplingPeriod())
+	if (millis() - wait_start >= (unsigned int)sensor.getMinimumSamplingPeriod())
 	{
 		wait_start = millis();
 

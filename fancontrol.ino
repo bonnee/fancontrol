@@ -158,7 +158,7 @@ void loop()
   {
     prev1 = millis();
 
-    char *status = "";
+    char status[64];
     sprintf(status, "trg:%f:temp:%f:perc:%u:rpm:%u\n", cfg.get_target(), display_temp, fan.get_percent(), fan.get_speed());
   }
 

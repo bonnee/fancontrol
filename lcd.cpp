@@ -16,7 +16,7 @@ void LCD::setup(int brightness)
 
 void LCD::write(const char *buf)
 {
-	int i = 0;
+	unsigned int i = 0;
 	while (i < strlen(buf))
 	{
 		//If not last then you can do i + 1
