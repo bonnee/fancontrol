@@ -51,7 +51,7 @@
 #define TARGET_UP 18    // Up/Down buttons pins
 #define TARGET_DOWN 19
 
-#define DBG false
+#define DBG true
 // Debug macro to print messages to serial
 #define DEBUG(x)  if(DBG && Serial) { Serial.print (x); }
 
@@ -248,7 +248,7 @@ void printSeg()
 
 void setup()
 {
-  Serial.begin(19200);
+  Serial.begin(115200);
   if (DBG)
   {
     while (!Serial) {}    /*   WAIT FOR THE SERIAL CONNECTION FOR DEBUGGING   */
