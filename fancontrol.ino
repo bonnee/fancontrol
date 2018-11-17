@@ -41,9 +41,9 @@
 #define SPD_IN 7        // RPM input pin
 
 // 7-segment display
-#define SEG_DIN 16
-#define SEG_CLK 14
-#define SEG_CS 15
+#define SEG_DIN 16  // MOSI
+#define SEG_CLK 15  // SCLK
+#define SEG_CS 14   // MISO
 
 #define RELAY 9         // Relay output pin
 
